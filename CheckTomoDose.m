@@ -145,8 +145,6 @@ matcen_z = 0;
 ctImPosPat = image.start*10;
 
 ct_MV = false;
-snapct=true;
-
 
 %% Run dose_from_sin code
 
@@ -265,23 +263,99 @@ if (halflength<0) %works for one FFS patient - need to check if generally works
     matcen_y=-matcen_y;
 end
 
-if snapct
-    %round matcen_y to nearest ctslice
-    couch1=ct_sorted_couch(1); %mm
-    ctstep=abs(couch1-ct_sorted_couch(2));
-    couch2=ctstep*floor(0.5 + couch1/ctstep);
-    dcouch=couch1-couch2; %mm if couch position not multiple of step
-    ct_ratio=floor(0.5 + (matcen_y-(dcouch))/(ctstep));
-    ct_temp=ct_ratio*ctstep +(dcouch);
-    matcen_rounding=ct_ymin-ct_temp;
-    matcen_y=ct_temp;
+%put dfromfoc and effdepth into 51 x n^3 vectors
+n=0;
+ndim=dose_dimensionxz*dose_dimensionxz*dose_dimensiony;
+Edepth=zeros(ndim,51*num_of_subprojections);
+Dfoc=zeros(ndim,51*num_of_subprojections);
+Theta3=zeros(ndim,51*num_of_subprojections);
+    
+for j=1:dose_dimensiony
+    n2d=0;
+    for i=1:dose_dimensionxz
+        for k=1:dose_dimensionxz
+            n=n+1;
+            n2d=n2d+1;
+            Xvalue(n)=Xvalue2D(n2d);
+            Yvalue(n)=ct_ylist(j)-start_y;
+            Zvalue(n)=Zvalue2D(n2d);
+            Edepth(n,:)=effdepth(j,n2d,:);
+            Dfoc(n,:)=dfromfoc(n2d,:);
+            Theta3(n,:)=theta(n2d,:);
+        end
+    end
 end
     
+YvalueRef=Yvalue;
+DdepthRef=repmat(delta_depth,dose_dimensiony,1);
+dosecube=0;
     
+gantryindex=0;
+Ddepth=DdepthRef;
+
+for p=1:n_of_proj
     
-    
-    
-    
+    %Split Projection Into Subprojections; allows for odd values up to 11. GST
+    whole_projection=sinogram(:,p);
+        subprojections=zeros(64,num_of_subprojections);
+        for MLCindex=1:64
+            if whole_projection(MLCindex)<=(1/num_of_subprojections)
+                subprojections(MLCindex,(num_of_subprojections+1)/2)=whole_projection(MLCindex);
+            elseif whole_projection(MLCindex)<=(3/num_of_subprojections)
+                subprojections(MLCindex,(num_of_subprojections+1)/2)=1/num_of_subprojections;
+                subprojections(MLCindex,(num_of_subprojections+3)/2)=(whole_projection(MLCindex)-1/num_of_subprojections)/2;
+                subprojections(MLCindex,(num_of_subprojections-1)/2)=(whole_projection(MLCindex)-1/num_of_subprojections)/2;
+            elseif whole_projection(MLCindex)<=(5/num_of_subprojections)
+                subprojections(MLCindex,((num_of_subprojections-1)/2):((num_of_subprojections+3)/2))=1/num_of_subprojections;
+                subprojections(MLCindex,(num_of_subprojections+5)/2)=(whole_projection(MLCindex)-3/num_of_subprojections)/2;
+                subprojections(MLCindex,(num_of_subprojections-3)/2)=(whole_projection(MLCindex)-3/num_of_subprojections)/2;
+            elseif whole_projection(MLCindex)<=(7/num_of_subprojections)
+                subprojections(MLCindex,((num_of_subprojections-3)/2):((num_of_subprojections+5)/2))=1/num_of_subprojections;
+                subprojections(MLCindex,(num_of_subprojections+7)/2)=(whole_projection(MLCindex)-5/num_of_subprojections)/2;
+                subprojections(MLCindex,(num_of_subprojections-5)/2)=(whole_projection(MLCindex)-5/num_of_subprojections)/2;
+            elseif whole_projection(MLCindex)<=(9/num_of_subprojections)
+                subprojections(MLCindex,((num_of_subprojections-5)/2):((num_of_subprojections+7)/2))=1/num_of_subprojections;
+                subprojections(MLCindex,(num_of_subprojections+9)/2)=(whole_projection(MLCindex)-7/num_of_subprojections)/2;
+                subprojections(MLCindex,(num_of_subprojections-7)/2)=(whole_projection(MLCindex)-7/num_of_subprojections)/2;    
+            elseif whole_projection(MLCindex)<=(11/num_of_subprojections)
+                subprojections(MLCindex,((num_of_subprojections-7)/2):((num_of_subprojections+9)/2))=1/num_of_subprojections;
+                subprojections(MLCindex,(num_of_subprojections+11)/2)=(whole_projection(MLCindex)-9/num_of_subprojections)/2;
+                subprojections(MLCindex,(num_of_subprojections-9)/2)=(whole_projection(MLCindex)-9/num_of_subprojections)/2; 
+            end
+        end
+
+    for subprojindex=1:num_of_subprojections
+        y4d=0;
+
+        gantryindex=gantryindex+1;
+        if gantryindex>51*num_of_subprojections
+            gantryindex=1;
+        end
+        projection=subprojections(:,subprojindex);
+        n=segmentprojection();
+        if (n>0)  %negative y4d 28/9/11  need to decide on sign
+            dosecube=dosecube+dose_from_projection(Yvalue-y4d,Theta3(:,gantryindex),Edepth(:,gantryindex),Dfoc(:,gantryindex),gantry_period,0.1.*Ddepth(:,gantryindex));
+        end
+        if (halflength>0)
+            Yvalue=Yvalue+delta_y; %head first
+        else
+            Yvalue=Yvalue-delta_y; %feet first
+        end
+
+    end
+end
+close(wb);
+%mean4d=sum4d/n4d;
+mindepth=min(Edepth');
+dosecube(mindepth<1.5)=-0.001;  %want small negative to flag outside patient
+
+
+
+
+
+
+
+
     
     
     
