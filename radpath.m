@@ -17,13 +17,12 @@ ctsize=ctdim*ones(1,2);
 %hutemp=zeros(3,15,225);
 for i=1:steps
     iz=floor(z);
-    iz(iz<1)=1; iz(iz>ctdim)=1;
+    iz(iz<1)=1; iz(iz>size(ctimages,3))=1;
     ix=floor(x);   
-    ix(ix<1)=1; ix(ix>ctdim)=1; %use 1 as flag both sides
+    ix(ix<1)=1; ix(ix>size(ctimages,2))=1; %use 1 as flag both sides
     if max(iz)==1, break, end
     if max(ix)==1, break, end  
-    hu=ctimages(:,sub2ind(ctsize,iz,ix));
-    rhoe=electron_density(hu,MVCT);
+    rhoe=ctimages(:,sub2ind([size(ctimages,2) size(ctimages,3)],ix,iz)); % electron_density() function was removed as the CT was already converted to density
     rpath=rpath+rhoe;  %will multiply by dr later
 
     %hutemp(1,:,i)=hu(:,113);

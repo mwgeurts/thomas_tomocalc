@@ -12,7 +12,7 @@ else
 end
 %pname='U:\Simon Thomas\comp_projects\TomoCheck\';
 pname=start_path;
-fid = fopen([pname '\' fname]);
+fid = fopen(fullfile(pname, fname)); % Modified by mwgeurts on 2017-04-19 to use fullfile to concatenate file name
 while 1>0    
 C=textscan(fid,'%[^[]'); 
 C=textscan(fid,'%[^]]');
