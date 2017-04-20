@@ -22,36 +22,36 @@ if strcmp(tagvalue,'[TPRdata')
 D=textscan(fid,'%d',1);
 TPR.ndepths=D{1};
 D=textscan(fid,'%f',TPR.ndepths);
-TPR.depths=D{1};
+TPR.depths=single(D{1});
 D=textscan(fid,'%d',1);
 TPR.nsizes=D{1};
 D=textscan(fid,'%f',TPR.nsizes);
-TPR.sizes=D{1};
+TPR.sizes=single(D{1});
 form1='%f';
 form2=' %f';
 for i=2:TPR.nsizes
     form1=strcat(form1,form2);
 end;
 D=textscan(fid,form1,TPR.ndepths);
-TPR.tpr=cell2mat(D);
+TPR.tpr=single(cell2mat(D));
 end
 
 if strcmp(tagvalue,'[SPdata')
             D=textscan(fid,'%d',1);
             SP.nsizes=D{1};
             D=textscan(fid,'%f',SP.nsizes);
-            SP.sizes=D{1};
+            SP.sizes=single(D{1});
             D=textscan(fid,'%f',SP.nsizes);
-            SP.values=D{1};
+            SP.values=single(D{1});
 end 
 if strcmp(tagvalue,'[OARXOPENdata')
     D=textscan(fid,'%d',1);
     OARXOPEN.ndepths=D{1};
     D=textscan(fid,'%f',OARXOPEN.ndepths);
-    OARXOPEN.depths=D{1}; 
+    OARXOPEN.depths=single(D{1}); 
     D=textscan(fid,'%d',1);
     OARXOPEN.nvalues=D{1};
-    OARXOPEN.indices=0:50;
+    OARXOPEN.indices=single(0:50);
     form1='%f';
     form2=' %f';
     for i=2:OARXOPEN.ndepths
@@ -59,23 +59,23 @@ if strcmp(tagvalue,'[OARXOPENdata')
     end;
     D=textscan(fid,form1,OARXOPEN.nvalues);
     
-    OARXOPEN.oar=cell2mat(D);
+    OARXOPEN.oar=single(cell2mat(D));
 end  
 
 if strcmp(tagvalue,'[OARXLEAVESdata')
     D=textscan(fid,'%d',1);    
     OARXLEAVES.nwidths=D{1};
     D=textscan(fid,'%d',OARXLEAVES.nwidths);
-    OARXLEAVES.widths=D{1};
+    OARXLEAVES.widths=single(D{1});
     D=textscan(fid,'%d',1);
     OARXLEAVES.ndepths=D{1};
     D=textscan(fid,'%f',OARXLEAVES.ndepths);
-    OARXLEAVES.depths=D{1}; 
+    OARXLEAVES.depths=single(D{1}); 
     D=textscan(fid,'%d',1);
     OARXLEAVES.nvalues=D{1};
     D=textscan(fid,'%f',OARXLEAVES.nvalues);
-    OARXLEAVES.indices=D{1};
-    OARXLEAVES.oar = zeros([OARXLEAVES.nvalues OARXLEAVES.ndepths OARXLEAVES.nwidths]); %initialise
+    OARXLEAVES.indices=single(D{1});
+    OARXLEAVES.oar = single(zeros([OARXLEAVES.nvalues OARXLEAVES.ndepths OARXLEAVES.nwidths])); %initialise
     form1='%f';
     form2=' %f';
     for i=2:OARXLEAVES.ndepths
@@ -83,7 +83,7 @@ if strcmp(tagvalue,'[OARXLEAVESdata')
     end;
     for w=1:OARXLEAVES.nwidths
        D=textscan(fid,form1,OARXLEAVES.nvalues); 
-       OARXLEAVES.oar(:,:,w)=cell2mat(D); 
+       OARXLEAVES.oar(:,:,w)=single(cell2mat(D)); 
     end
 end  
 
@@ -91,17 +91,17 @@ if strcmp(tagvalue,'[OARYdata')
     D=textscan(fid,'%d',1);    
     OARY.nwidths=D{1};
     D=textscan(fid,'%f',OARY.nwidths);
-    OARY.widths=D{1};
+    OARY.widths=single(D{1});
     
     D=textscan(fid,'%d',1);
     OARY.ndepths=D{1};
     D=textscan(fid,'%f',OARY.ndepths);
-    OARY.depths=D{1}; 
+    OARY.depths=single(D{1}); 
     D=textscan(fid,'%d',1);
     OARY.nvalues=D{1};
     D=textscan(fid,'%f',OARY.nvalues);
-    OARY.indices=D{1};
-    OARY.oar = zeros([OARY.nvalues OARY.ndepths OARY.nwidths]); %initialise
+    OARY.indices=single(D{1});
+    OARY.oar = single(zeros([OARY.nvalues OARY.ndepths OARY.nwidths])); %initialise
     form1='%f';
     form2=' %f';
     for i=2:OARY.ndepths
@@ -109,7 +109,7 @@ if strcmp(tagvalue,'[OARYdata')
     end;
     for w=1:OARY.nwidths
         D=textscan(fid,form1,OARY.nvalues);
-        OARY.oar(:,:,w)=cell2mat(D); 
+        OARY.oar(:,:,w)=single(cell2mat(D)); 
     end  
 end
 

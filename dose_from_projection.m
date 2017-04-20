@@ -28,10 +28,10 @@ for seg=1:segments.nseg
     nleaves=int16(xnleaves);
     width=(1+lastleaf-leaf1)*0.625; %0.625cm per leaf at 85cm
     midpos=(0.5*(leaf1+lastleaf) - 32.5)*0.625;  %mid between leaf 32 and 33
-    eqsq=2*SP.length*width/(SP.length+width); 
-    tprvalue=interp2(TPR.sizes,TPR.depths,TPR.tpr,eqsq,depth);
+    eqsq=single(2*SP.length*width/(SP.length+width)); 
+    tprvalue=interp2(TPR.sizes,TPR.depths,TPR.tpr,eqsq,depth, '*linear');
     tprvalue(depth<=0)=0; %set any outside phantom to zero
-    spvalue=interp1(SP.sizes,SP.values,width);
+    spvalue=interp1(SP.sizes,SP.values,width, 'linear');
 %calculate index for 40-wide x-profile
         theta=abs(Xtheta);
         oarindex=theta/0.005; %5 milliradian steps
@@ -39,7 +39,7 @@ for seg=1:segments.nseg
 
         oarindex(oarindex>maxopenindex)=maxopenindex;%added SJT 29/9/14 to trap out of range values
         
-        oar40value=interp2(OARXOPEN.depths,OARXOPEN.indices,OARXOPEN.oar,depthx,oarindex);
+        oar40value=interp2(OARXOPEN.depths,OARXOPEN.indices,OARXOPEN.oar,depthx,oarindex, '*linear');
     %calculate profile for field set by leaves
         theta=abs(Xtheta-atan(midpos/85));
         if nleaves>2
@@ -50,7 +50,7 @@ for seg=1:segments.nseg
         end
         oarindex=theta/0.001; %milliradians
         oarindex(oarindex>maxleafindex)=maxleafindex;%added SJT 29/9/14 to trap out of range values
-        oarxvalue=interp2(OARXLEAVES.depths,OARXLEAVES.indices,OARXLEAVES.oar(:,:,nleaves),depthx,oarindex,'linear',0);
+        oarxvalue=interp2(OARXLEAVES.depths,OARXLEAVES.indices,OARXLEAVES.oar(:,:,nleaves),depthx,oarindex,'*linear',0);
         oarxv=oarxvalue.*oar40value;
     %calculate index for y-profile
         theta=atan(abs(Yvalue./(85-ddepth')));
@@ -58,10 +58,10 @@ for seg=1:segments.nseg
         if width<OARY.widths(1)
             width=OARY.widths(1); %this is OK, because width is a scalar
         end
-        wvect=repmat(width,1,size(oarindex,1)); %gets it vectorised the same as oarindex
+        wvect=single(repmat(width,1,size(oarindex,1))); %gets it vectorised the same as oarindex
         oarindex=theta/0.001;  % milliradians
         oarindex(oarindex>maxyindex)=maxyindex;%added SJT 29/9/14 to trap out of range values
-        oaryvalue=interp3(OARY.depths,OARY.indices,OARY.widths,OARY.oar,depthx',oarindex,wvect,'linear',0);
+        oaryvalue=interp3(OARY.depths,OARY.indices,OARY.widths,OARY.oar,depthx',oarindex,wvect,'*linear',0);
         
         dose=dose+ weight*spvalue*(tprvalue'.*oarxv'.*oaryvalue);
 
