@@ -106,6 +106,8 @@ if exist('Event', 'file') == 2
     Event('Defining runtime variables');
 end
 
+downsample = 8;
+
 reference_doserate=8.5;
 
 field_width = sum(abs([plan.frontField plan.backField]));
@@ -125,7 +127,7 @@ for i = 1:size(plan.events, 1)
     if strcmp(plan.events{i,2}, 'isoX')
         
         % Define isoc_pos X position
-        isoc_pos(1) = (plan.events{i,3} - plan.registration(4))*10;
+        isoc_pos(1) = -(plan.events{i,3} + plan.registration(4))*10;
 
     % Otherwise, if type is isoY, apply IECZ registration adjustment
     elseif strcmp(plan.events{i,2}, 'isoY')
@@ -137,39 +139,37 @@ for i = 1:size(plan.events, 1)
     elseif strcmp(plan.events{i,2}, 'isoZ')
         
         % Define isoc_pos Y position
-        isoc_pos(2) = (plan.events{i,3} + plan.registration(5))*10;
+        isoc_pos(2) = -(plan.events{i,3} + plan.registration(5))*10;
         start_y = isoc_pos(2);
         
     % Otherwise, if type is gantryAngle, apply roll registration adjustment
     elseif strcmp(plan.events{i,2}, 'gantryAngle')
         
         % Define original_gantry_start and TomoRoll
-        original_gantry_start = plan.events{i,3};
+        original_gantry_start = mod(plan.events{i,3} + 180, 360);
         TomoRoll = plan.registration(3) * 180/pi;
     end
 end
 
-% OVERRIDE isoc_pos to zero
-isoc_pos = zeros(1,3);
-
 % Define dose dimensions
-dose_dimensionxz=floor(image.dimensions(2)/8);
+dose_dimensionxz=floor(image.dimensions(1)/downsample);
 dose_dimensiony=image.dimensions(3);
-dose_gridxz=image.width(1)*8*10;
+dose_gridxz=image.width(1)*downsample*10;
 dose_gridy=image.width(3)*10;
 
 ctpix=image.width(1)*10;
 
-matcen_x = 0;
-matcen_z = 0;
+% Set dose grid center to CT image center
+matcen_x = (image.start(1) + image.width(1)*(image.dimensions(1)-1)/2) * 10;
+matcen_z = (image.start(2) + image.width(2)*(image.dimensions(2)-1)/2) * 10;
 
-ctImPosPat = image.start*10;
-
-ct_MV = false;
+ctImPosPat = [image.start(1) -(image.start(2)+image.width(2)...
+    *(image.dimensions(2)-1)) -image.start(3)] * 10;
 
 gantry_period = single(plan.scale * 51 / plan.fractions);
 
 if exist('Event', 'file') == 2
+    Event(sprintf('Downsampling Factor: %i', downsample));
     Event(sprintf('Dose rate: %0.1f Gy/min', reference_doserate));
     Event(sprintf('Field Width: %0.1f cm', field_width));
     Event(['Start path: ', start_path]);
@@ -186,13 +186,11 @@ if exist('Event', 'file') == 2
     Event(sprintf('Dose grid dimensions (y): %i', dose_dimensiony));
     Event(sprintf('Dose grid resolution (xz): %0.2f mm', dose_gridxz));
     Event(sprintf('Dose grid resolution (y): %0.2f mm', dose_gridy));
+    Event(sprintf('Dose grid center (xz): [%0.2f %0.2f] mm', ...
+        matcen_x, matcen_z));
     Event(sprintf('CT resolution: %0.2f mm', ctpix));
-    Event(sprintf('Matrix center (xz): [%0.2f %0.2f] mm', matcen_x, matcen_z));
     Event(sprintf('CT image position: [%0.2f %0.2f %0.2f] mm', ctImPosPat(1), ...
         ctImPosPat(2), ctImPosPat(3)));
-    tf = {'false', 'true'};
-    Event(['MV calculation: ', tf{ct_MV+1}]);
-    clear tf;
 end
 
 %% Run dose_from_sin code
@@ -214,7 +212,6 @@ final_isoc_pos=[isoc_pos(1) isoc_pos(2) (isoc_pos(3) - ncpoints/51 * ...
     pitch * field_width)];
 
 halflength=(isoc_pos(3)-final_isoc_pos(3))/2;  %mm
-
 
 %determine which slices we want
 ct_ylist=ones(dose_dimensiony,1);
@@ -240,7 +237,6 @@ ctimages = interp1(image.ivdt(:,1), image.ivdt(:,2), ...
 
 rotx=1-(ctImPosPat(1)-isoc_pos(1))/pixelsize; %added 25/1/13
 rotz=1-(ctImPosPat(2)-isoc_pos(2))/pixelsize; %added 25/1/13
-    
 
 %set up cube for dose calc
 totalpoints=dose_dimensionxz*dose_dimensionxz*dose_dimensiony;
@@ -316,7 +312,8 @@ for iang=1:51*num_of_subprojections
     dx=xpixel-xfocus(iang);
     dz=zpixel-zfocus(iang);
     dfromfoc(:,iang)=single(sqrt(dx.*dx + dz.*dz)*(pixelsize)); %distance in mm
-    effdepth(:,:,iang)=single(radpath(ctimages,xfocus(iang),xpixel,zfocus(iang),zpixel,ct_MV)*(pixelsize));
+    effdepth(:,:,iang)=single(radpath(ctimages,xfocus(iang),xpixel,...
+        zfocus(iang),zpixel)*(pixelsize));
 end
 
 %put dfromfoc and effdepth into 51 x n^3 vectors
@@ -434,14 +431,20 @@ for p=1:n_of_proj
 end
 
 %mean4d=sum4d/n4d;
-mindepth=min(Edepth');
-dosecube(mindepth<1.5)=-0.001;  %want small negative to flag outside patient
+% mindepth=min(Edepth, [], 2);
+% dosecube(mindepth<1.5)=-0.001;  %want small negative to flag outside patient
 
 %% Garbage collection
 clear Dfoc Edepth sinogram segments projection subproj SP OARXLEAVES ...
     OARXOPEN OARY Theta3 TPR;
 
 %% Interpolate back to CT resolution
+% Log interpolation step
+if exist('Event', 'file') == 2
+    Event(sprintf(['Upsampling calculated dose image by %i using ', ...
+        'nearest neighbor interpolation'], downsample));
+end
+        
 % Multiply by number of fractions to get total dose
 dosecube = dosecube * plan.fractions;
 
@@ -453,8 +456,10 @@ dose.start = image.start;
 dose.width = image.width;
 dose.dimensions = image.dimensions;
 
-x = reshape(Xvalue, dose_dimensionxz, dose_dimensionxz, dose_dimensiony);
-z = reshape(Zvalue, dose_dimensionxz, dose_dimensionxz, dose_dimensiony);
+x = reshape(Xvalue, dose_dimensionxz, dose_dimensionxz, dose_dimensiony) ...
+    + dose_gridxz/2;
+z = reshape(Zvalue, dose_dimensionxz, dose_dimensionxz, dose_dimensiony) ...
+    + dose_gridxz/2;
 dose_small = reshape(dosecube, dose_dimensionxz, dose_dimensionxz, ...
     dose_dimensiony);
 
@@ -468,14 +473,26 @@ dose_small = reshape(dosecube, dose_dimensionxz, dose_dimensionxz, ...
 for i = 1:dose.dimensions(3)
    
     % Interpolate back to image dimensions
-    dose.data(:,:,i) = interp2(x(:,:,i), z(:,:,i), dose_small(:,:,i), mx, my, 'nearest');
+    dose.data(:,:,i) = interp2(x(:,:,i), z(:,:,i), ...
+        dose_small(:,:,i), mx, my, 'nearest');
 end
 
 % Clear temporary variables
 clear x y z i mx my dose_small dosecube;
 
 % Log conclusion and stop timer
-
+if exist('Event', 'file') == 2
+    
+    % If using a parallel pool
+    if isobject(pool) && pool.Connected
+        Event(sprintf(['Dose calculation completed successfully in %0.3f ', ...
+            'seconds, sending %0.1f kB to %i workers'], toc, ...
+            max(max(tocBytes(pool), pool.NumWorkers))));
+    else
+        Event(sprintf(['Dose calculation completed successfully in %0.3f ', ...
+            'seconds'], toc));
+    end
+end
 
 % Catch errors, log, and rethrow
 catch err
