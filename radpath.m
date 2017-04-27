@@ -12,6 +12,8 @@ deltaz=dz/steps;
 x=xp;
 z=zp;
 rpath=0;
+ctdim=max(size(ctimages,2), size(ctimages,3));
+ctsize=ctdim*ones(1,2);
 for i=1:steps
     iz=floor(z);
     iz(iz<1)=1; iz(iz>size(ctimages,3))=1;
@@ -19,7 +21,7 @@ for i=1:steps
     ix(ix<1)=1; ix(ix>size(ctimages,2))=1; %use 1 as flag both sides
     if max(iz)==1, break, end
     if max(ix)==1, break, end  
-    rhoe=ctimages(:,sub2ind([size(ctimages,3) size(ctimages,2)],iz,ix)); % electron_density() function was removed as the CT was already converted to density
+    rhoe=ctimages(:,sub2ind(ctsize,iz,ix)); % electron_density() function was removed as the CT was already converted to density
     rpath=rpath+rhoe;  %will multiply by dr later
 
     x=x+deltax;
