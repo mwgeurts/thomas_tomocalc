@@ -115,7 +115,7 @@ if exist('Event', 'file') == 2
 end
 
 % Downsample the dose grid by this factor in the IEC X and Z directions
-downsample = 8;
+downsample = 4;
 
 % Define the machine nominal dose rate in Gy/min as a global. This is used
 % by dose_from_projection()
