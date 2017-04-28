@@ -1,6 +1,10 @@
 function readTomodata(field_width)
 global TPR SP OARXOPEN OARXLEAVES OARY; 
-global start_path
+
+% Store the path of this function as a global. This is used by 
+% readTomodata()
+[start_path, ~, ~] = fileparts(mfilename('fullpath'));
+
 %[fname pname] = uigetfile('*.txt');
 SP.length=field_width; 
 if field_width>=5.0
