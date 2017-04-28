@@ -1,4 +1,4 @@
-function dose = CheckTomoDose(varargin)
+function dose = CheckTomoDose2(varargin)
 
 
 
@@ -8,8 +8,8 @@ function dose = CheckTomoDose(varargin)
 % Start by setting globals. These are used by the CheckTomo specific
 % functions below, and have been left as globals to maintain compatibility
 % with future versions
-global start_path SP TPR OARXOPEN OARXLEAVES OARY segments ...
-    reference_doserate dose_dimensiony projection subproj lensubproj;
+global SP TPR OARXOPEN OARXLEAVES OARY segments ...
+    reference_doserate projection subproj lensubproj;
 
 % Persistently store parallel pool
 persistent pool;
@@ -92,13 +92,18 @@ if exist('Event', 'file') == 2
     end
 end
 
-% Execute in try/catch statement
-try 
-    
 %% Initialize parallel pool
 % Attach the necessary files, if they do not already exist
+if isobject(pool) && pool.Connected
     
+    
+    
+end
 
+
+%% Begin computations
+% Execute in try/catch statement
+try 
     
 %% Define dose_from_sin() variables
 % The following variables are used in the original dose_from_sin() function
@@ -118,10 +123,6 @@ reference_doserate = 8.5;
 
 % Store the field width from the plan structure
 field_width = sum(abs([plan.frontField plan.backField]));
-
-% Store the path of this function as a global. This is used by 
-% readTomodata()
-[start_path, ~, ~] = fileparts(mfilename('fullpath'));
 
 % Store the machine agnostic sinogram (normalized to 1)
 sinogram = plan.agnostic;
@@ -167,22 +168,20 @@ for i = 1:size(plan.events, 1)
         isoc_pos(3) = (plan.events{i,3} + plan.registration(5) ...
             + (plan.startTrim(1) - 1) / 51 * field_width * pitch) * -10;
         
-        % Define start_y as the isoc_pos IECY position
-        start_y = isoc_pos(3);
-        
     % Otherwise, if type is gantryAngle, apply roll registration adjustment
     elseif strcmp(plan.events{i,2}, 'gantryAngle')
         
-        % Define original_gantry_start angle and TomoRoll, in degrees. The
+        % Define original_gantry_start angle adjusting for roll, in degrees. The
         % plan start gantry angle must be adjusted by the number of gantry
         % rotations for all leading empty projections (defined by
-        % startTrim).For TomoRoll, the registration vector is in radians, 
-        % so must be converted to degrees.
-        original_gantry_start = mod(plan.events{i,3} + ...
-            (plan.startTrim(1) - 1) * 360/ 51, 360);
-        TomoRoll = plan.registration(3) * 180/pi;
+        % startTrim).
+        original_gantry_start = mod(plan.events{i,3} + (plan.startTrim(1) ...
+            - 1) * 360/51 + plan.registration(3) * 180/pi, 360);
     end
 end
+
+% Clear temporary variables
+clear i;
 
 % Define dose dimensions
 % The axial (xz) dimension assumes the dose volume will be square, and is
@@ -229,16 +228,13 @@ if exist('Event', 'file') == 2
     Event(sprintf('Downsampling Factor: %i', downsample));
     Event(sprintf('Dose rate: %0.1f Gy/min', reference_doserate));
     Event(sprintf('Field Width: %0.1f cm', field_width));
-    Event(['Start path: ', start_path]);
     Event(sprintf('Pitch: %0.3f', pitch));
     Event(sprintf('Gantry Period: %0.3f sec', gantry_period));
     Event(sprintf('Number of projections: %i', size(sinogram, 2)));
     Event(sprintf('Number of subprojections: %i', num_of_subprojections));
     Event(sprintf('Isocenter position: [%0.2f %0.2f %0.2f] mm', isoc_pos(1), ...
         isoc_pos(2), isoc_pos(3)));
-    Event(sprintf('Start Y: %0.2f mm', start_y));
     Event(sprintf('Gantry start angle: %0.2f deg', original_gantry_start));
-    Event(sprintf('Roll correction: %0.2f deg', TomoRoll));
     Event(sprintf('Dose grid dimensions (xz): %i', dose_dimensionxz));
     Event(sprintf('Dose grid dimensions (y): %i', dose_dimensiony));
     Event(sprintf('Dose grid resolution (xz): %0.2f mm', dose_gridxz));
@@ -259,46 +255,7 @@ end
 
 % Run readTomodata to populate TPR, OARXOPEN, OARXLEAVES, OARY, and SP
 % global variables
-readTomodata(field_width);
-
-% Define the number of projections in the sinogram
-n_of_proj = size(sinogram, 2);
-
-% Define the amount of couch (IECY) motion per subprojection
-delta_y = (pitch * 10 * field_width) / (51 * num_of_subprojections);
-
-% Define the number of control points (this is the same as the number of
-% projections?)
-ncpoints = size(sinogram, 2);
-
-% Define the final isocenter position as the DICOM position at the last
-% projection, in mm. The amount of couch travel (applied to isoc_pos(3) is
-% determined using the product of the couch rotations, pitch, and field
-% width.
-final_isoc_pos = [isoc_pos(1) isoc_pos(2) (isoc_pos(3) - ncpoints / 51 * ...
-    pitch * field_width * 10)];
-
-% Define half length as half the distance between the start and final
-% isocenter position
-halflength = (isoc_pos(3) - final_isoc_pos(3)) / 2;
-
-% Determine which slices we want
-% Initialize ct_ylist as a unit vector with the same length as the number 
-% dose voxels in the IECY dimension
-ct_ylist = ones(dose_dimensiony, 1);
-
-% Define ct_ymin using the head first notation, as the TomoTherapy image
-% always will assume HFS
-ct_ymin = start_y - dose_gridy * (dose_dimensiony - 1)/2 - halflength;
-
-% Loop through each dose slice
-for i=1:dose_dimensiony
-
-    % Compute the CT slice that corresponds to the dose slice, assuming
-    % head first, as the TomoTherapy image always assumes HFS
-    ct_ylist(i) = ct_ymin + (i - 1) * dose_gridy;
-
-end
+[TPR, SP, OARXOPEN, OARXLEAVES, OARY] = readTomodata(field_width);
 
 % Define ctimages as the 3D CT image volume converted to physical density
 % using the IVDT associated with the plan. The image must also be flipped
@@ -335,64 +292,28 @@ rotx = 1 - (ctImPosPat(1) - isoc_pos(1)) / ctpix;
 rotz = 1 - (ctImPosPat(2) - isoc_pos(2)) / ctpix;
 
 % Set up cube for dose calc
-% Define totalpoints as the total number of dose voxels in the 3D volume
-totalpoints = dose_dimensionxz * dose_dimensionxz * dose_dimensiony;
-
 % Log the total number of dose voxels
 if exist('Event', 'file') == 2
-    Event(sprintf('Total number of calculation points: %i', totalpoints));
+    Event(sprintf('Total number of calculation points: %i', ...
+        dose_dimensionxz * dose_dimensionxz * dose_dimensiony));
 end
 
-% Initialize empty vectors for the IECX, Y, and Z values of each dose voxel
-Xvalue=zeros(1, totalpoints);
-Yvalue=zeros(1, totalpoints);
-Zvalue=zeros(1, totalpoints);
+% Store the position of each dose voxel in the X and Z locations, centered
+% around zero
+xzlist = ((1:dose_dimensionxz) - (dose_dimensionxz + 1) / 2) * dose_gridxz;
 
-% Create 2D list of points for CT
-% Initialize empty vectors for the IECX and Z values of each dose voxel
-Xvalue2D = zeros(1, dose_dimensionxz * dose_dimensionxz);
-Zvalue2D = zeros(1, dose_dimensionxz * dose_dimensionxz);
+% Store the dose voxel X position as the centered position plus the dose
+% matrix X offset
+Xvalue2D = reshape(repmat(matcen_x + xzlist, dose_dimensionxz, 1), 1, []);
 
-% Initialize counter
-n = 0;
-
-% Initialize empty vector of dose voxel coordinates, assuming grid is
-% centered
-xzlist = zeros(1, dose_dimensionxz);
-
-% Loop through the number of dose voxels
-for i = 1:dose_dimensionxz
-    
-    % Store the voxel position, centered on zero
-    xzlist(i) = (i - (dose_dimensionxz + 1) / 2) * dose_gridxz;
-end
-
-% Loop through the number of dose voxels in the X direction
-for i=1:dose_dimensionxz
-    
-    % Loop through the number of dose voxels in the Z direction
-    for k=1:dose_dimensionxz
-        
-        % Increment counter
-        n = n + 1;
-        
-        % Store the dose voxel X position as the centered position plus the
-        % dose matrix X offset
-        Xvalue2D(n) = matcen_x + xzlist(i);
-        
-        % Store the dose voxel Z position as the centered position plus the
-        % dose matric Z offset
-        Zvalue2D(n) = matcen_z + xzlist(k);
-    end
-end
+% Store the dose voxel Z position as the centered position plus the dose
+% matrix Z offset
+Zvalue2D = reshape(repmat(matcen_z + xzlist, dose_dimensionxz, 1)', 1, []);
 
 % Define the gantry start angle as the original gantry angle plus the
 % half number of degrees for a single subprojection. This basically centers
 % the gantry start angle on the first subprojection.
 gantry_start = original_gantry_start + (180 / (51 * num_of_subprojections));
-
-% Subtract any roll corrections to the start position
-gantry_start = gantry_start - TomoRoll;
 
 % Define a vector of angles, converted to radians, of each subprojection
 alphav = (gantry_start * pi / 180) + (0:(51 * num_of_subprojections - 1)) * ...
@@ -422,7 +343,7 @@ ppp = repmat(rho', 1, 51 * num_of_subprojections) .* ...
 theta = atan(ppp ./ (850 - delta_depth));
 
 %% Garbage collection
-clear alphav ppp rho xzlist ct_ymin;
+clear alphav phi ppp rho xzlist matcen_x matcen_z;
 
 %% Ray Tracing
 if exist('Event', 'file') == 2
@@ -464,33 +385,45 @@ for iang = 1:51 * num_of_subprojections
         zfocus(iang), zpixel) * ctpix);
 end
 
+% Define the final isocenter position as the DICOM position at the last
+% projection, in mm. The amount of couch travel (applied to isoc_pos(3) is
+% determined using the product of the couch rotations, pitch, and field
+% width.
+final_isoc_pos = [isoc_pos(1) isoc_pos(2) (isoc_pos(3) - ...
+    size(sinogram, 2) / 51 * pitch * field_width * 10)];
+
+% Define ct_ymin using the head first notation, as the TomoTherapy image
+% always will assume HFS
+ct_ymin = isoc_pos(3) - dose_gridy * (dose_dimensiony - 1)/2 - ...
+    (isoc_pos(3) - final_isoc_pos(3)) / 2;
+
+% Compute the CT slice that corresponds to the dose slice, assuming
+% head first, as the TomoTherapy image always assumes HFS
+ct_ylist = ct_ymin + ((1:dose_dimensiony) - 1) * dose_gridy;
+
+% Store the IECX, Y, and Z values of each dose voxel in a vector
+Xvalue = single(repmat(Xvalue2D, 1, dose_dimensiony));
+Yvalue = single(reshape(repmat((ct_ylist-isoc_pos(3)), dose_dimensionxz * ...
+    dose_dimensionxz, 1), 1, []));
+Zvalue = single(repmat(Zvalue2D, 1, dose_dimensiony));
+
+
+
+
+
+
+
 %put dfromfoc and effdepth into 51 x n^3 vectors
-n=0;
-ndim=dose_dimensionxz * dose_dimensionxz * dose_dimensiony;
-Edepth=single(zeros(ndim, 51 * num_of_subprojections));
-Dfoc=single(zeros(ndim, 51 * num_of_subprojections));
-Theta3=single(zeros(ndim, 51 * num_of_subprojections));
-    
-for j=1:dose_dimensiony
-    n2d=0;
-    for i=1:dose_dimensionxz
-        for k=1:dose_dimensionxz
-            n=n+1;
-            n2d=n2d+1;
-            Xvalue(n)=single(Xvalue2D(n2d));
-            Yvalue(n)=single(ct_ylist(j)-start_y);
-            Zvalue(n)=single(Zvalue2D(n2d));
-            Edepth(n,:)=single(effdepth(j,n2d,:));
-            Dfoc(n,:)=single(dfromfoc(n2d,:));
-            Theta3(n,:)=single(theta(n2d,:));
-        end
-    end
-end
+Edepth=single(reshape(permute(effdepth, [2 1 3]), dose_dimensionxz * ...
+    dose_dimensionxz * dose_dimensiony, 51 * num_of_subprojections));
+Dfoc=single(repmat(dfromfoc, dose_dimensiony, 1));
+Theta3=single(repmat(theta, dose_dimensiony, 1));
 
 %% Garbage Collection
 % Clear array variables that are no longer used
-clear ct_ylist ctimages dfromfoc effdepth theta xfocus xpixel ...
-    Xvalue2D zfocus zpixel Zvalue2D ct_MV n n2d;
+%clear ct_ylist ctimages dfromfoc effdepth theta xfocus xpixel ...
+%    Xvalue2D zfocus zpixel Zvalue2D n2d ndim ctpix isoc_pos rotx rotz;
+
 
 %% Dose Calculation
 if exist('Event', 'file') == 2
@@ -503,11 +436,11 @@ dosecube=0;
 gantryindex=0;
 Ddepth=DdepthRef;
 
-for p=1:n_of_proj
+for p = 1:size(sinogram, 2)
     
     if exist('Event', 'file') == 2
         Event(sprintf('Calculating dose from projection %i of %i', ...
-            p, n_of_proj));
+            p, size(sinogram, 2)));
     end
     
     %Split Projection Into Subprojections; allows for odd values up to 11. GST
@@ -569,7 +502,7 @@ for p=1:n_of_proj
                 Dfoc(:,gantryindex), gantry_period, ...
                 0.1.*Ddepth(:,gantryindex));
         end
-        Yvalue=Yvalue+delta_y; %head first
+        Yvalue=Yvalue+(pitch * 10 * field_width) / (51 * num_of_subprojections); %head first
 
 
     end
@@ -579,8 +512,8 @@ mindepth=min(Edepth, [], 2);
 dosecube(mindepth<1.5) = 0;
 
 %% Garbage collection
-clear Dfoc Edepth sinogram segments projection subproj SP OARXLEAVES ...
-    OARXOPEN OARY Theta3 TPR mindepth;
+%clear Dfoc Edepth sinogram segments projection subproj SP OARXLEAVES ...
+%    OARXOPEN OARY Theta3 TPR mindepth gantry_period pitch;
 
 %% Interpolate back to CT resolution
 % Log interpolation step
@@ -622,7 +555,7 @@ for i = 1:dose.dimensions(3)
 end
 
 % Clear temporary variables
-clear x y z i mx my dose_small dosecube;
+% clear x y z i mx my dose_small dosecube downsample;
 
 % Log conclusion and stop timer
 if exist('Event', 'file') == 2
