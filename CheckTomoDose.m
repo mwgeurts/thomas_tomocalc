@@ -1,18 +1,12 @@
-function dose = CheckTomoDose2(varargin)
+function dose = CheckTomoDose(varargin)
 
 
 
 
 
 
-% Start by setting globals. These are used by the CheckTomo specific
-% functions below, and have been left as globals to maintain compatibility
-% with future versions
-global SP TPR OARXOPEN OARXLEAVES OARY segments ...
-    reference_doserate projection subproj lensubproj;
-
-% Persistently store parallel pool
-persistent pool;
+% Persistently store parallel pool and image
+persistent pool image;
 
 % If no inputs provided, return calcdose flag
 if nargin == 1
@@ -544,25 +538,40 @@ for p = 1:size(sinogram, 2)
         gantryindex = mod((p-1) * num_of_subprojections + i - 1, ...
             51 * num_of_subprojections) + 1;
         
-        projection=subprojections(:,i);
-
-        if (segmentprojection()>0)  %negative y4d 28/9/11  need to decide on sign
-            dosecube=dosecube+dose_from_projection(Yvalue, ...
+        % Separate subprojection into segments using the function
+        % segmentprojection. If all leaves are closed, n will be zero
+        [n, segments] = segmentprojection(subprojections(:, i));
+        
+        % If at least one segment is found, continue to calculate dose for
+        % this subprojection
+        if (n>0)
+            
+            % Execute dose_from_projection, adding result to existing
+            % dosecube array. Note that dose_from_projection uses cm, so
+            % the depths are converted by diving by 10
+            dosecube = dosecube + dose_from_projection(Yvalue, ...
                 Theta3(:,gantryindex), Edepth(:,gantryindex), ...
                 Dfoc(:,gantryindex), gantry_period, ...
-                0.1.*Ddepth(:,gantryindex));
+                Ddepth(:,gantryindex)/10, reference_doserate, SP, TPR, ...
+                OARXOPEN, OARXLEAVES, OARY, segments);
         end
-        Yvalue=Yvalue+(pitch * 10 * field_width) / ...
-            (51 * num_of_subprojections); %head first
-
-
+        
+        % Move the couch values foward by one subprojection
+        Yvalue = Yvalue + (pitch * 10 * field_width) / ...
+            (51 * num_of_subprojections);
     end
 end
 
+% Compute the minimum effective depth (from any source angle) of each dose
+% voxel
 mindepth=min(Edepth, [], 2);
-dosecube(mindepth<1.5) = 0;
+
+% Truncate all dose voxels where the effective depth is less than 1.5 mm.
+% This effectively removes dose outside the patient/couch
+dosecube(mindepth < 1.5) = 0;
 
 %% Garbage collection
+% Clean up unused variables
 clear Dfoc Edepth sinogram segments projection subproj SP OARXLEAVES ...
     OARXOPEN OARY Theta3 TPR mindepth gantry_period pitch Ddepth Yvalue ...
     subprojections;
@@ -580,29 +589,33 @@ dosecube = dosecube * plan.fractions;
 % Initialize dose.data array
 dose.data = zeros(image.dimensions);  
 
-% Copy dose image start, width, and dimensions from CT image
+% Copy dose image start, width, and dimensions from CT image. After
+% interpolation, the dose array will have the same coordinate system.
 dose.start = image.start;
 dose.width = image.width;
 dose.dimensions = image.dimensions;
 
+% Reshape the dose voxel IEC X and Z position vectors into meshgrid format.
+% A half voxel is added to shift the coordinate system to define the voxel
+% edge, rather than the center.
 x = reshape(Xvalue, dose_dimensionxz, dose_dimensionxz, dose_dimensiony) ...
-    + dose_gridxz/2;
+    + dose_gridxz / 2;
 z = reshape(Zvalue, dose_dimensionxz, dose_dimensionxz, dose_dimensiony) ...
-    + dose_gridxz/2;
+    + dose_gridxz / 2;
 dose_small = reshape(dosecube, dose_dimensionxz, dose_dimensionxz, ...
     dose_dimensiony);
 
 % Compute target meshgrids
-[my, mx] = meshgrid((dose.start(2)*10+dose.width*10*(dose.dimensions(2)))...
-    :-dose.width(2)*10:(dose.start(2)+dose.width)*10, ...
-    dose.start(1)*10:dose.width(1)*10:...
-    (dose.start(1)*10+dose.width*10*(dose.dimensions(1)-1)));
+[my, mx] = meshgrid((dose.start(2)+dose.width*(dose.dimensions(2)))...
+    :-dose.width(2):(dose.start(2)+dose.width), ...
+    dose.start(1):dose.width(1):...
+    (dose.start(1)+dose.width*(dose.dimensions(1)-1)));
 
 % Loop through slices
 for i = 1:dose.dimensions(3)
    
     % Interpolate back to image dimensions
-    dose.data(:,:,i) = interp2(x(:,:,i), z(:,:,i), ...
+    dose.data(:,:,i) = interp2(x(:,:,i)/10, z(:,:,i)/10, ...
         dose_small(:,:,i), mx, my, 'nearest');
 end
 

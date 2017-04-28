@@ -1,7 +1,4 @@
-function dose=dose_from_projection(Yvaluemm,Xtheta,depthmm,dfromfocmm,gantry_period,ddepth)
-global SP TPR OARXOPEN OARXLEAVES OARY segments;
-global reference_doserate
-%changed Sept 2013 to make all inputs in mm
+function dose=dose_from_projection(Yvaluemm,Xtheta,depthmm,dfromfocmm,gantry_period,ddepth,reference_doserate,SP,TPR,OARXOPEN,OARXLEAVES,OARY,segments)
 %internal to this function only, will use cm
 Yvalue=Yvaluemm/10;
 depth=depthmm/10;
