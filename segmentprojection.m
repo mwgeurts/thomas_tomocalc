@@ -1,6 +1,6 @@
 function nproj=segmentprojection()
 %read projection from text file
-global projection segments subproj lensubproj;
+global projection segments;
 %fname='projection.txt';
 %pname='U:\Simon Thomas\comp_projects\TomoCheck\';
 %fid = fopen([pname fname]);

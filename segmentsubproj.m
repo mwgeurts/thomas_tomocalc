@@ -1,6 +1,6 @@
 function newnproj=segmentsubproj(projval,nproj)
 %extract the next segment from a projection.
-global projection segments subproj lensubproj;
+global segments subproj lensubproj;
 
     a=subproj(projval,:,2);
     mv=min(a(1:lensubproj(projval))); %smallest value - i.e. value for largest segment
