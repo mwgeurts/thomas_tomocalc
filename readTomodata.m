@@ -26,7 +26,9 @@ function [TPR, SP, OARXOPEN, OARXLEAVES, OARY] = readTomodata(field_width)
 %       indices, and oar. See the documentation in the code below for more 
 %       details on each field.
 %
-% Author: Simon Thomas, adapted by Mark Geurts, mark.w.geurts@gmail.com 
+% Author: Simon Thomas, adapted by Mark Geurts, mark.w.geurts@gmail.com
+% Original work Copyright (C) 2011-15  Simon Thomas 
+% Adapted work Copyright (C) 2017 University of Wisconsin Board of Regents
 %
 % This program is free software: you can redistribute it and/or modify it 
 % under the terms of the GNU General Public License as published by the  

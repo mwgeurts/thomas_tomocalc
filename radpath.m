@@ -23,7 +23,9 @@ function  rpath = radpath(ctimages, xf, xp, zf, zp)
 %       is each dose voxel (corresponding to each voxel defined in xf and 
 %       zf)
 %
-% Author: Simon Thomas, adapted by Mark Geurts, mark.w.geurts@gmail.com 
+% Author: Simon Thomas, adapted by Mark Geurts, mark.w.geurts@gmail.com
+% Original work Copyright (C) 2011-15  Simon Thomas 
+% Adapted work Copyright (C) 2017 University of Wisconsin Board of Regents
 %
 % This program is free software: you can redistribute it and/or modify it 
 % under the terms of the GNU General Public License as published by the  
