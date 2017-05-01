@@ -55,7 +55,7 @@ OARXLEAVES = struct;
 OARY = struct;
 
 % Store the input variable as the length field in Sp
-SP.length=field_width; 
+SP.length = single(field_width); 
 
 % Store the file names and nominal field widths for each jaw position
 files = {
