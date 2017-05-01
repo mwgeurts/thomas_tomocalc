@@ -212,4 +212,4 @@ while ~feof(fid)
 end
 
 % Clear temporary variables
-clear i D fid tagvalue start_path files;
+clear i D fid tagvalue start_path files field_width;

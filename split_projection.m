@@ -32,7 +32,8 @@ function subprojections = split_projection(sinogram, p, n)
 % MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General 
 % Public License for more details.
 % 
-% You should have received a copy of the GNU General Public License a
+% You should have received a copy of the GNU General Public License along 
+% with this program. If not, see http://www.gnu.org/licenses/.
 
 % Initialize subprojection leaf open time array
 subprojections = zeros(64, n);

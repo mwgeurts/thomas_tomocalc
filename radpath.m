@@ -94,3 +94,6 @@ end
 % Multiply the density array by the length of each step (dr). This converts
 % the units of the return variable to g-mm/cc
 rpath = rpath .* repmat(sqrt(dx.^2 + dz.^2)/steps, size(ctimages,1), 1);
+
+% Clear temporary variables
+clear ctimages ctsize dx dz i ix iz steps xf xp zf zp;
