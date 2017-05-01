@@ -8,6 +8,24 @@ function dose = CheckTomoDose(varargin)
 % Persistently store parallel pool and image
 persistent pool image;
 
+% Downsample the dose grid by this factor in the IEC X and Z directions.
+% This value can be overridden in the input arguments
+downsample = 8;
+
+% Define the machine nominal dose rate in Gy/min as a global. This is used
+% by dose_from_projection(). This value can be overriden in the input
+% arguments
+reference_doserate = 8.5;
+
+% Define the number of subprojections to calculate. If set to 1, then one
+% ray tracing/dose calculation is performed for each of the 51 projections.
+% If set to 3, then three positions are modeled (similar to the 
+% supersampling flag in the TPS). As discussed below, this value must be an 
+% odd integer between 1 and 11. Note that increasing this variable
+% significantly increases memory requirements and computation time. This 
+% value can be overriden in the input arguments
+num_of_subprojections = 1;
+
 % If no inputs provided, return calcdose flag
 if nargin == 1
     
@@ -22,7 +40,7 @@ elseif nargin == 2
     plan = varargin{2};
     
 % Otherwise, if 3 inputs are provided, store image, plan, and parallel pool
-elseif nargin == 3
+elseif nargin >= 3
     
     % Store image and plan variables
     image = varargin{1};
@@ -40,8 +58,25 @@ else
     end
 end
 
+% Store remaining input arguments
+for i = 4:2:nargin
+    
+    % If the user passed a downsample input argument, update it
+    if strcmpi(varargin{i}, 'downsample')
+        downsample = varargin{i+1};
+    
+    % Else, if the user passed a reference_doserate input argument
+    elseif strcmpi(varargin{i}, 'reference_doserate')
+        reference_doserate = varargin{i+1};
+    
+    % Else, if the user passed a num_of_subprojections input argument
+    elseif strcmpi(varargin{i}, 'num_of_subprojections')
+        num_of_subprojections = varargin{i+1};
+    end   
+end
+
 % Clear varargin
-clear varargin;
+clear i varargin;
 
 %% Verify plan type
 % Throw an error if the plan type is non-Helical
@@ -138,13 +173,6 @@ if exist('Event', 'file') == 2
     Event('Defining runtime variables');
 end
 
-% Downsample the dose grid by this factor in the IEC X and Z directions
-downsample = 8;
-
-% Define the machine nominal dose rate in Gy/min as a global. This is used
-% by dose_from_projection()
-reference_doserate = 8.5;
-
 % Store the field width from the plan structure
 field_width = sum(abs([plan.frontField plan.backField]));
 
@@ -153,14 +181,6 @@ sinogram = plan.agnostic;
 
 % Store the plan pitch (unitless)
 pitch = plan.pitch;
-
-% Define the number of subprojections to calculate. If set to 1, then one
-% ray tracing/dose calculation is performed for each of the 51 projections.
-% If set to 3, then three positions are modeled (similar to the 
-% supersampling flag in the TPS). As discussed below, this value must be an 
-% odd integer between 1 and 11. Note that increasing this variable
-% significantly increases memory requirements and computation time!
-num_of_subprojections = 1;
 
 % Loop through the events cell array
 for i = 1:size(plan.events, 1)
@@ -584,20 +604,16 @@ dose.width = image.width;
 dose.dimensions = image.dimensions;
 
 % Reshape the dose voxel IEC X and Z position vectors into meshgrid format.
-% A half voxel is added to shift the coordinate system to define the voxel
-% edge, rather than the center.
-x = reshape(Xvalue, dose_dimensionxz, dose_dimensionxz, dose_dimensiony) ...
-    + dose_gridxz / 2;
+x = reshape(Xvalue, dose_dimensionxz, dose_dimensionxz, dose_dimensiony);
 z = reshape(Zvalue, dose_dimensionxz, dose_dimensionxz, dose_dimensiony) ...
-    + dose_gridxz / 2;
+    + dose_gridxz;
 dose_small = reshape(dosecube, dose_dimensionxz, dose_dimensionxz, ...
     dose_dimensiony);
 
 % Compute target meshgrids
-[my, mx] = meshgrid((dose.start(2)+dose.width*(dose.dimensions(2)))...
-    :-dose.width(2):(dose.start(2)+dose.width), ...
-    dose.start(1):dose.width(1):...
-    (dose.start(1)+dose.width*(dose.dimensions(1)-1)));
+[my, mx] = meshgrid((dose.start(2) + dose.width * (dose.dimensions(2) - 1))...
+    :-dose.width(2):dose.start(2), dose.start(1):...
+    dose.width(1):(dose.start(1) + dose.width * (dose.dimensions(1) - 1)));
 
 % Loop through slices
 for i = 1:dose.dimensions(3)
