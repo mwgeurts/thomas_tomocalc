@@ -94,6 +94,7 @@ if isobject(pool) && pool.Connected
     necessaryFiles = {
         'dose_from_projection.m'
         'segmentprojection.m'
+        'split_projection.m'
     };
 
     % Loop through files
@@ -459,114 +460,16 @@ if isobject(pool) && pool.Connected
     
     % Log start of dose calculation
     if exist('Event', 'file') == 2
-        Event('Executing calculations on parallel pool');
+        Event(['Executing calculations on parallel pool ', ...
+            '(progress not displayed)']);
     end
     
     % Loop through each projection in the sinogram in parallel
     parfor p = 1:size(sinogram, 2)
 
-        % Log current projection number and total projections
-        if exist('Event', 'file') == 2
-            Event(sprintf('Calculating dose from projection %i of %i', ...
-                p, size(sinogram, 2)));
-        end
-
-        %% Split Projection Into Subprojections
-        % This code block will separate a single leaf open time for each MLC
-        % leaf in a sinogram projection into an array of leaf open times for
-        % each subprojection.
-
-        % Initialize subprojection leaf open time array
-        subprojections = zeros(64, num_of_subprojections);
-
-        % Loop through each leaf
-        for MLCindex = 1:64
-
-            % If the leaf open time fits within one subprojection
-            if sinogram(MLCindex, p) <= (1 / num_of_subprojections)
-
-                % Store the entire leaf open time in the central subprojection
-                subprojections(MLCindex, (num_of_subprojections + 1) / 2) = ...
-                    sinogram(MLCindex, p);
-
-            % Otherwise, if the leaf open time is less than three
-            % subprojections
-            elseif sinogram(MLCindex, p) <= (3 / num_of_subprojections)
-
-                % Store a full leaf open time in the central subprojection
-                subprojections(MLCindex, (num_of_subprojections + 1) / 2) = ...
-                    1 / num_of_subprojections;
-
-                % Store half of the remaining time into the upper and lower
-                % subprojections
-                subprojections(MLCindex, (num_of_subprojections + 3) / 2) = ...
-                    (sinogram(MLCindex, p) - 1 / num_of_subprojections) / 2;
-                subprojections(MLCindex, (num_of_subprojections - 1) / 2) = ...
-                    (sinogram(MLCindex, p) - 1 / num_of_subprojections) / 2;
-
-            % Otherwise, if the leaf open time is less than five subprojections
-            elseif sinogram(MLCindex, p) <= (5 / num_of_subprojections)
-
-                % Store a full leaf open time in the central subprojections
-                subprojections(MLCindex, ((num_of_subprojections - 1) / 2):...
-                    ((num_of_subprojections + 3) / 2)) = ...
-                    1/num_of_subprojections;
-
-                % Store half of the remaining time into the adjacent 
-                % upper and lower subprojections
-                subprojections(MLCindex, (num_of_subprojections + 5) / 2) = ...
-                    (sinogram(MLCindex, p) - 3 / num_of_subprojections) / 2;
-                subprojections(MLCindex , (num_of_subprojections - 3) / 2) = ...
-                    (sinogram(MLCindex, p) - 3 / num_of_subprojections) / 2;
-
-            % Otherwise, if the leaf open time is less than seven 
-            % subprojections 
-            elseif sinogram(MLCindex, p) <= (7 / num_of_subprojections)
-
-                % Store a full leaf open time in the central subprojections
-                subprojections(MLCindex, ((num_of_subprojections - 3) / 2):...
-                    ((num_of_subprojections + 5) / 2)) = ...
-                    1 / num_of_subprojections;
-
-                % Store half of the remaining time into the adjacent 
-                % upper and lower subprojections
-                subprojections(MLCindex , (num_of_subprojections + 7) / 2) = ...
-                    (sinogram(MLCindex, p) - 5 / num_of_subprojections) / 2;
-                subprojections(MLCindex , (num_of_subprojections - 5) / 2) = ...
-                    (sinogram(MLCindex, p) - 5 / num_of_subprojections) / 2;
-
-            % Otherwise, if the leaf open time is less than nine subprojections 
-            elseif sinogram(MLCindex, p) <= (9 / num_of_subprojections)
-
-                % Store a full leaf open time in the central subprojections
-                subprojections(MLCindex, ((num_of_subprojections - 5) / 2):...
-                    ((num_of_subprojections + 7) / 2)) = ...
-                    1 / num_of_subprojections;
-
-                % Store half of the remaining time into the adjacent 
-                % upper and lower subprojections
-                subprojections(MLCindex , (num_of_subprojections + 9) / 2) = ...
-                    (sinogram(MLCindex, p) - 7 / num_of_subprojections) / 2;
-                subprojections(MLCindex , (num_of_subprojections-7) / 2) = ...
-                    (sinogram(MLCindex, p) - 7 / num_of_subprojections) / 2;    
-
-            % Otherwise, if the leaf open time is less than eleven 
-            % subprojections 
-            elseif sinogram(MLCindex, p) <= (11 / num_of_subprojections)
-
-                % Store a full leaf open time in the central subprojections
-                subprojections(MLCindex, ((num_of_subprojections - 7) / 2):...
-                    ((num_of_subprojections + 9) / 2)) = ...
-                    1 / num_of_subprojections;
-
-                % Store half of the remaining time into the adjacent 
-                % upper and lower subprojections
-                subprojections(MLCindex , (num_of_subprojections + 11) / 2) = ...
-                    (sinogram(MLCindex, p) - 9 / num_of_subprojections) / 2;
-                subprojections(MLCindex , (num_of_subprojections - 9) / 2) = ...
-                    (sinogram(MLCindex, p) - 9 / num_of_subprojections) / 2; 
-            end
-        end
+        % Split Projection Into Subprojections
+        subprojections = ...
+            split_projection(sinogram, p, num_of_subprojections);
 
         %% Loop through each subprojection, calculating dose
         for i = 1:num_of_subprojections
@@ -581,21 +484,21 @@ if isobject(pool) && pool.Connected
 
             % If at least one segment is found, continue to calculate dose for
             % this subprojection
-            if (n>0)
+            if (n > 0)
 
-                % Compute local Y position, considering couch motion
-                localY = Yvalue + ((p-1) * num_of_subprojections + i) * ...
+                % Compute local Y position in cm, considering couch motion
+                localY = (Yvalue + ((p-1) * num_of_subprojections + i) * ...
                     (pitch * 10 * field_width) / ...
-                    (51 * num_of_subprojections);
+                    (51 * num_of_subprojections)) / 10;
                 
                 % Execute dose_from_projection, adding result to existing
                 % dosecube array. Note that dose_from_projection uses cm, so
                 % the depths are converted by diving by 10
                 dosecube = dosecube + dose_from_projection(localY, ...
-                    Theta3(:,gantryindex), Edepth(:,gantryindex), ...
-                    Dfoc(:,gantryindex), gantry_period, ...
+                    Theta3(:,gantryindex), Edepth(:,gantryindex)/10, ...
+                    Dfoc(:,gantryindex)/10, gantry_period, ...
                     Ddepth(:,gantryindex)/10, reference_doserate, SP, TPR, ...
-                    OARXOPEN, OARXLEAVES, OARY, segments);
+                    OARXOPEN, OARXLEAVES, OARY, segments); %#ok<PFBNS,PFRUS>
             end
         end
     end 
@@ -609,102 +512,9 @@ else
                 p, size(sinogram, 2)));
         end
 
-        %% Split Projection Into Subprojections
-        % This code block will separate a single leaf open time for each MLC
-        % leaf in a sinogram projection into an array of leaf open times for
-        % each subprojection.
-
-        % Initialize subprojection leaf open time array
-        subprojections = zeros(64, num_of_subprojections);
-
-        % Loop through each leaf
-        for MLCindex = 1:64
-
-            % If the leaf open time fits within one subprojection
-            if sinogram(MLCindex, p) <= (1 / num_of_subprojections)
-
-                % Store the entire leaf open time in the central subprojection
-                subprojections(MLCindex, (num_of_subprojections + 1) / 2) = ...
-                    sinogram(MLCindex, p);
-
-            % Otherwise, if the leaf open time is less than three
-            % subprojections
-            elseif sinogram(MLCindex, p) <= (3 / num_of_subprojections)
-
-                % Store a full leaf open time in the central subprojection
-                subprojections(MLCindex, (num_of_subprojections + 1) / 2) = ...
-                    1 / num_of_subprojections;
-
-                % Store half of the remaining time into the upper and lower
-                % subprojections
-                subprojections(MLCindex, (num_of_subprojections + 3) / 2) = ...
-                    (sinogram(MLCindex, p) - 1 / num_of_subprojections) / 2;
-                subprojections(MLCindex, (num_of_subprojections - 1) / 2) = ...
-                    (sinogram(MLCindex, p) - 1 / num_of_subprojections) / 2;
-
-            % Otherwise, if the leaf open time is less than five subprojections
-            elseif sinogram(MLCindex, p) <= (5 / num_of_subprojections)
-
-                % Store a full leaf open time in the central subprojections
-                subprojections(MLCindex, ((num_of_subprojections - 1) / 2):...
-                    ((num_of_subprojections + 3) / 2)) = ...
-                    1/num_of_subprojections;
-
-                % Store half of the remaining time into the adjacent 
-                % upper and lower subprojections
-                subprojections(MLCindex, (num_of_subprojections + 5) / 2) = ...
-                    (sinogram(MLCindex, p) - 3 / num_of_subprojections) / 2;
-                subprojections(MLCindex , (num_of_subprojections - 3) / 2) = ...
-                    (sinogram(MLCindex, p) - 3 / num_of_subprojections) / 2;
-
-            % Otherwise, if the leaf open time is less than seven 
-            % subprojections 
-            elseif sinogram(MLCindex, p) <= (7 / num_of_subprojections)
-
-                % Store a full leaf open time in the central subprojections
-                subprojections(MLCindex, ((num_of_subprojections - 3) / 2):...
-                    ((num_of_subprojections + 5) / 2)) = ...
-                    1 / num_of_subprojections;
-
-                % Store half of the remaining time into the adjacent 
-                % upper and lower subprojections
-                subprojections(MLCindex , (num_of_subprojections + 7) / 2) = ...
-                    (sinogram(MLCindex, p) - 5 / num_of_subprojections) / 2;
-                subprojections(MLCindex , (num_of_subprojections - 5) / 2) = ...
-                    (sinogram(MLCindex, p) - 5 / num_of_subprojections) / 2;
-
-            % Otherwise, if the leaf open time is less than nine subprojections 
-            elseif sinogram(MLCindex, p) <= (9 / num_of_subprojections)
-
-                % Store a full leaf open time in the central subprojections
-                subprojections(MLCindex, ((num_of_subprojections - 5) / 2):...
-                    ((num_of_subprojections + 7) / 2)) = ...
-                    1 / num_of_subprojections;
-
-                % Store half of the remaining time into the adjacent 
-                % upper and lower subprojections
-                subprojections(MLCindex , (num_of_subprojections + 9) / 2) = ...
-                    (sinogram(MLCindex, p) - 7 / num_of_subprojections) / 2;
-                subprojections(MLCindex , (num_of_subprojections-7) / 2) = ...
-                    (sinogram(MLCindex, p) - 7 / num_of_subprojections) / 2;    
-
-            % Otherwise, if the leaf open time is less than eleven 
-            % subprojections 
-            elseif sinogram(MLCindex, p) <= (11 / num_of_subprojections)
-
-                % Store a full leaf open time in the central subprojections
-                subprojections(MLCindex, ((num_of_subprojections - 7) / 2):...
-                    ((num_of_subprojections + 9) / 2)) = ...
-                    1 / num_of_subprojections;
-
-                % Store half of the remaining time into the adjacent 
-                % upper and lower subprojections
-                subprojections(MLCindex , (num_of_subprojections + 11) / 2) = ...
-                    (sinogram(MLCindex, p) - 9 / num_of_subprojections) / 2;
-                subprojections(MLCindex , (num_of_subprojections - 9) / 2) = ...
-                    (sinogram(MLCindex, p) - 9 / num_of_subprojections) / 2; 
-            end
-        end
+        % Split Projection Into Subprojections
+        subprojections = ...
+            split_projection(sinogram, p, num_of_subprojections);
 
         %% Loop through each subprojection, calculating dose
         for i = 1:num_of_subprojections
@@ -719,19 +529,19 @@ else
 
             % If at least one segment is found, continue to calculate dose for
             % this subprojection
-            if (n>0)
+            if (n > 0)
 
-                % Compute local Y position, considering couch motion
-                localY = Yvalue + ((p-1) * num_of_subprojections + i) * ...
+                % Compute local Y position in cm, considering couch motion
+                localY = (Yvalue + ((p-1) * num_of_subprojections + i) * ...
                     (pitch * 10 * field_width) / ...
-                    (51 * num_of_subprojections);
+                    (51 * num_of_subprojections)) / 10;
                 
                 % Execute dose_from_projection, adding result to existing
                 % dosecube array. Note that dose_from_projection uses cm, so
                 % the depths are converted by diving by 10
                 dosecube = dosecube + dose_from_projection(localY, ...
-                    Theta3(:,gantryindex), Edepth(:,gantryindex), ...
-                    Dfoc(:,gantryindex), gantry_period, ...
+                    Theta3(:,gantryindex), Edepth(:,gantryindex)/10, ...
+                    Dfoc(:,gantryindex)/10, gantry_period, ...
                     Ddepth(:,gantryindex)/10, reference_doserate, SP, TPR, ...
                     OARXOPEN, OARXLEAVES, OARY, segments);
             end
@@ -740,8 +550,9 @@ else
 end
 
 % Compute the minimum effective depth (from any source angle) of each dose
-% voxel
-mindepth=min(Edepth, [], 2);
+% voxel. This is used to truncate voxels that are near or outside the
+% patient; see the next line of code below.
+mindepth = min(Edepth, [], 2);
 
 % Truncate all dose voxels where the effective depth is less than 1.5 mm.
 % This effectively removes dose outside the patient/couch
@@ -793,7 +604,7 @@ for i = 1:dose.dimensions(3)
    
     % Interpolate back to image dimensions
     dose.data(:,:,i) = interp2(x(:,:,i)/10, z(:,:,i)/10, ...
-        dose_small(:,:,i), mx, my, 'nearest');
+        dose_small(:,:,i), mx, my, 'nearest', 0);
 end
 
 % Clear temporary variables
