@@ -8,10 +8,38 @@ function dose = dose_from_projection(Yvalue, Xtheta, depth, dfromfoc, ...
 % the global variables as additional input arguments.
 %
 % The following inputs are required for execution:
-%
+%   Yvalue: n x 1 vector of IEC Y positions, in cm, for each of n dose 
+%       voxels to be computed. The length of Yvalue must equal Xtheta,
+%       depth, dfromfoc, and ddepth
+%   Xtheta: n x 1 vector of off axis angles, in radians, for each dose
+%       voxel to be computed.
+%   depth: n x 1 vector of effective depths, in g/cm^2, for each dose voxel
+%       to be computed.
+%   dfromfoc: n x 1 vector of distances from the focal source to each dose 
+%       voxel to be computed. 
+%   gantry_period: helical plan gantry period, in seconds.
+%   ddepth: n x 1 vector of depths, in cm, for each dose voxel to be
+%       computed.
+%   reference_doserate: treatment system dose rate, in Gy/min
+%   SP: structure with fields length, nsizes, sizes, and values. See the
+%       function readTomodata for more details on each field.
+%   TPR: structure with fields ndepths, depths, nsizes, sizes, and tpr. See
+%       the function readTomodata for more details on each field.
+%   OARXOPEN: structure with fields ndepths, depths, nvalues, indices, and
+%       oar. See the function readTomodata for more details on each field.
+%   OARXLEAVES: structure with fields nwidths, widths, ndepths, depths,
+%       nvalues, indices, and oar. See the function readTomodata for more 
+%       details on each field.
+%   OARY: structure with fields nwidths, widths, ndepths, depths, nvalues, 
+%       indices, and oar. See the function readTomodata for more details on 
+%       each field.
+%   segments:
 %
 % The following variables are returned upon successful completion:
-%
+%   dose: 1 x n vector of dose values, in Gy, for each voxel defined in 
+%       Yvalue, depth, dfromfoc, and Xtheta for the provided segments. Note
+%       that the dose vector is transposed from its respective input
+%       vectors.
 %
 % Author: Simon Thomas, adapted by Mark Geurts, mark.w.geurts@gmail.com
 % Original work Copyright (C) 2011-15  Simon Thomas 
@@ -50,7 +78,7 @@ for seg = 1:segments.nseg
     %% Calculate the TPR, Sp, and open field MLC and longitudinal OARs
     % Compute the TPR values of each voxel depth, computing the equivalent
     % square as 2 * SP.length * width / (SP.length + width). The method was 
-    % modified from *linear in the original CheckTomo code to nearest to 
+    % modified from nearest in the original CheckTomo code to nearest to 
     % improve computation time
     tprvalue = interp2(TPR.sizes, TPR.depths, TPR.tpr, ...
         2 * SP.length * width / (SP.length + width), depth, 'nearest');
@@ -60,7 +88,7 @@ for seg = 1:segments.nseg
     
     % Compute the open field MLC OAR values for each voxel looking up the
     % radial theta (indexed to the nearest 0.005 radian). The interpolation
-    % method was modified from *linear in the original CheckTomo code to
+    % method was modified from nearest in the original CheckTomo code to
     % improve computation time
     oar40value = interp2(OARXOPEN.depths,OARXOPEN.indices,OARXOPEN.oar, ...
         depth, min(abs(Xtheta) / 0.005, max(OARXOPEN.indices)), 'nearest');
@@ -68,7 +96,7 @@ for seg = 1:segments.nseg
     % Compute the longitudinal OAR value for each voxel, indexing the 
     % radial theta to the nearest 0.001 radian and limiting the maximum 
     % value to the maximum index available in OARY. The interpolation 
-    % method was modified from *linear in the original CheckTomo code 
+    % method was modified from nearest in the original CheckTomo code 
     % to improve computation time
     oaryvalue = interp3(OARY.depths, OARY.indices, OARY.widths, ...
         OARY.oar, depth', min(max(OARY.indices), atan(abs(Yvalue ./ ...
@@ -97,7 +125,7 @@ for seg = 1:segments.nseg
     % Compute the MLC defined field OAR values for each voxel, indexing the 
     % radial distance to the nearest 0.001 radian and limiting the maximum 
     % value to the maximum index available in OARXLEAVES. The interpolation 
-    % method was modified from *linear in the original CheckTomo code 
+    % method was modified from nearest in the original CheckTomo code 
     % to improve computation time
     oarxvalue = interp2(OARXLEAVES.depths, OARXLEAVES.indices, ...
         OARXLEAVES.oar(:, :, nleaves), depth, min(max(OARXLEAVES.indices), ...
@@ -117,5 +145,10 @@ end
 % reference dose measurement inverse square correction (86.5/85)^2, 
 % reference measurement TPR (1.37), minute to second conversion (1/60), and
 % total projection time (gantry period/51)
-dose = dose .* (85 / (dfromfoc .* cos(Xtheta))).^2 * reference_doserate ...
+dose = dose .* (85 ./ (dfromfoc .* cos(Xtheta)))'.^2 * reference_doserate ...
     * (86.5/85)^2 / (1.37 * 60) * gantry_period / 51;
+
+% Clear temporary variables
+clear oarxvalue nleaves theta oaryvalue oar40value spvalue tprvalue width ...
+    Yvalue Xtheta depth dfromfoc gantry_period ddepth reference_doserate ...
+    SP TPR OARXOPEN OARXLEAVES OARY segments seg
