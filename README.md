@@ -76,11 +76,7 @@ For more information on the methods employed in this tool, see [Thomas et al. In
 
 ## Troubleshooting
 
-This function will report progress information by calling the function
-% Event(message, flag) if it exists in the application path, where the
-% message is a string and the flag is one of the following strings: 'INFO',
-% 'WARN', or 'ERROR'. See the file at the following address for an example:
-% https://github.com/mwgeurts/exit_detector/blob/master/Event.m
+This function will report progress information by calling the function `Event(message, flag)` if it exists in the application path, where `message` is a string and the `flag` is one of the following strings: 'INFO', 'WARN', or 'ERROR'. See the file at the following address for an example that writes the event information to a file: https://github.com/mwgeurts/exit_detector/blob/master/Event.m
 
 ## License
 
