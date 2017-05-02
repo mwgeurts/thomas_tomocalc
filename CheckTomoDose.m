@@ -1,9 +1,87 @@
 function dose = CheckTomoDose(varargin)
-
-
-
-
-
+% CheckTomoDose is a modified form of the original dose_from_sin function
+% in the CheckTomo tool developed by Simon Thomas. It was adapted to
+% calculate dose given input data provided in the format used by the 
+% tomo_extract and dicom_tools GitHub repositories developed by Mark
+% Geurts (https://github.com/mwgeurts). The function was also expanded to
+% allow computation on a MATLAB cluster to improve computation time.
+% Various other minor changes have been made to different lines of the
+% code; refer to the comments in this and the other functions of this
+% repository for details.
+% 
+% For more information on the methods employed in this tool, see Thomas et 
+% al. Independent dose calculation software for tomotherapy, Med Phys 2015; 
+% 39: 160-167. The original tool, CheckTomo, can be obtained through the
+% GPL license by contacting Simon Thomas (refer to the correspondence
+% address in the journal article referenced above for contact information).
+%
+% This function will report progress information by calling the function
+% Event(message, flag) if it exists in the application path, where the
+% message is a string and the flag is one of the following strings: 'INFO',
+% 'WARN', or 'ERROR'. See the file at the following address for an example:
+% https://github.com/mwgeurts/exit_detector/blob/master/Event.m
+%
+% This function can be executed with various combinations of input
+% arguments. Upon first execution, at least two arguments are required, as
+% shown in the following example, where image and plan are structures
+% returned by the tomo_extract functions LoadImage and LoadPlan:
+%
+%   dose = CheckTomoDose(image, plan);
+%
+% The image is stored persistently, so after the first call, a second plan
+% may be calculated with only one input argument:
+%
+%   dose = CheckTomoDose(plan);
+%
+% A parallel pool can also be passed in the third input argument (the first
+% two must be image and plan):
+%
+%   dose = CheckTomoDose(image, plan, pool);
+%
+% Finally, additional configuration options can be passed as name/value
+% pairs for input arguments 4 and on. The available options are 
+% 'downsample', 'reference_doserate', and 'num_of_subprojections'. See the
+% code below for detail on each option:
+%
+%   dose = CheckTomoDose(image, plan, pool, 'reference_doserate', 8.2);
+%   dose = CheckTomoDose(image, plan, [], 'num_of_subprojections', 3);
+%
+% Upon successful completion, this function returns the structure dose,
+% which contains the following fields:
+%   start: 1 x 3 vector of position cooordinates, in cm, for the lower left
+%       voxel. These coordinates are identical to image.start.
+%   width: 1 x 3 vector of voxel dimensions, in cm
+%   dimensions: 1 x 3 vector of the size of dose.data
+%   data: 3D array of dose values, in Gy, of dimensions provided above
+%   
+% Below is complete example of how this function is used:
+%
+%   % Load image and plan data for the plan specified by the UID below
+%   image = LoadImage('./path/', 'TomoPhant^^^^_patient.xml', ...
+%       '1.2.826.0.1.3680043.2.200.1828118229.362.96568.1276');
+%   plan = LoadPlan('./path/', 'TomoPhant^^^^_patient.xml', ...
+%       '1.2.826.0.1.3680043.2.200.1828118229.362.96568.1276');
+%
+%   % Execute CheckTomoDose with 2 workers and apply a downsampling factor
+%   pool = parpool(2);
+%   dose = CheckTomoDose(image, plan, pool, 'downsample', 4);
+%
+% Author: Simon Thomas, adapted by Mark Geurts, mark.w.geurts@gmail.com
+% Original work Copyright (C) 2011-15  Simon Thomas 
+% Adapted work Copyright (C) 2017 University of Wisconsin Board of Regents
+%
+% This program is free software: you can redistribute it and/or modify it 
+% under the terms of the GNU General Public License as published by the  
+% Free Software Foundation, either version 3 of the License, or (at your 
+% option) any later version.
+%
+% This program is distributed in the hope that it will be useful, but 
+% WITHOUT ANY WARRANTY; without even the implied warranty of 
+% MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General 
+% Public License for more details.
+% 
+% You should have received a copy of the GNU General Public License along 
+% with this program. If not, see http://www.gnu.org/licenses/.
 
 % Persistently store parallel pool and image
 persistent pool image;

@@ -33,7 +33,9 @@ function dose = dose_from_projection(Yvalue, Xtheta, depth, dfromfoc, ...
 %   OARY: structure with fields nwidths, widths, ndepths, depths, nvalues, 
 %       indices, and oar. See the function readTomodata for more details on 
 %       each field.
-%   segments:
+%   segments: structure containing segment details, with fields nseg, 
+%       startval, endval, and value. See segmentprojection for details on
+%       each value.
 %
 % The following variables are returned upon successful completion:
 %   dose: 1 x n vector of dose values, in Gy, for each voxel defined in 
@@ -151,4 +153,4 @@ dose = dose .* (85 ./ (dfromfoc .* cos(Xtheta)))'.^2 * reference_doserate ...
 % Clear temporary variables
 clear oarxvalue nleaves theta oaryvalue oar40value spvalue tprvalue width ...
     Yvalue Xtheta depth dfromfoc gantry_period ddepth reference_doserate ...
-    SP TPR OARXOPEN OARXLEAVES OARY segments seg
+    SP TPR OARXOPEN OARXLEAVES OARY segments seg;
