@@ -40,8 +40,8 @@ function dose = CheckTomoDose(varargin)
 %
 % Finally, additional configuration options can be passed as name/value
 % pairs for input arguments 4 and on. The available options are 
-% 'downsample', 'reference_doserate', and 'num_of_subprojections'. See the
-% code below for detail on each option:
+% 'downsample', 'reference_doserate', 'outside_body', 'density_threshold', 
+% and 'num_of_subprojections'. See the code for detail on each option:
 %
 %   dose = CheckTomoDose(image, plan, pool, 'reference_doserate', 8.2);
 %   dose = CheckTomoDose(image, plan, [], 'num_of_subprojections', 3);
@@ -104,6 +104,15 @@ reference_doserate = 8.5;
 % value can be overriden in the input arguments
 num_of_subprojections = 1;
 
+% Define the outside_body flag. If set to 0, CheckTomoDose will truncate 
+% dose voxels outside the patient (determined by the minimum effective 
+% depth). If set to 1, all dose voxels will be returned.
+outside_body = 0;
+
+% Define the density threshold, below which values are clipped. This is
+% needed to help the system define where the patient surface is
+density_threshold = 0.01;
+
 % If no inputs provided, return calcdose flag
 if nargin == 1
     
@@ -150,6 +159,14 @@ for i = 4:2:nargin
     % Else, if the user passed a num_of_subprojections input argument
     elseif strcmpi(varargin{i}, 'num_of_subprojections')
         num_of_subprojections = varargin{i+1};
+        
+    % Else, if the user passed a outside_body input argument
+    elseif strcmpi(varargin{i}, 'outside_body')
+        outside_body = varargin{i+1};
+        
+    % Else, if the user passed a density_threshold input argument
+    elseif strcmpi(varargin{i}, 'density_threshold')
+        density_threshold = varargin{i+1};
     end   
 end
 
@@ -205,9 +222,9 @@ if isobject(pool) && pool.Connected
     
     % Define necessary files for parallel computation
     necessaryFiles = {
-        'dose_from_projection.m'
-        'segmentprojection.m'
-        'split_projection.m'
+        'private/dose_from_projection.m'
+        'private/segmentprojection.m'
+        'private/split_projection.m'
     };
 
     % Loop through files
@@ -267,7 +284,7 @@ for i = 1:size(plan.events, 1)
     if strcmp(plan.events{i,2}, 'isoX')
         
         % Define isoc_pos IECX position, in mm. This corresponds to the X
-        % position of the DICOM CT header, plus any IECX offset provided by
+        % position of the plan header, plus any IECX offset provided by
         % the registration array.
         isoc_pos(1) = (plan.events{i,3} + plan.registration(4)) * 10;
 
@@ -275,9 +292,8 @@ for i = 1:size(plan.events, 1)
     elseif strcmp(plan.events{i,2}, 'isoY')
         
         % Define isoc_pos IECZ position, in mm. This corresponds to the Z
-        % position of the DICOM header, which is inverted from the
-        % TomoTherapy coordinate system (TomoTherapy specifies the position
-        % of the lower left voxel)
+        % position of the plan header, plus any IECZ offset provided by
+        % the registration array.
         isoc_pos(2) = -(plan.events{i,3} + plan.registration(6)) * 10;
         
     % Otherwise, if type is isoZ, apply IECY registration adjustment
@@ -288,15 +304,15 @@ for i = 1:size(plan.events, 1)
         % coordinate system) by the number of empty projections (defined by 
         % startTrim) converted into couch travel, in mm.
         isoc_pos(3) = (plan.events{i,3} + plan.registration(5) ...
-            + (plan.startTrim(1) - 1) / 51 * field_width * pitch) * -10;
+            + (plan.startTrim(1) - 1) / 51 * field_width * pitch) * 10;
         
     % Otherwise, if type is gantryAngle, apply roll registration adjustment
     elseif strcmp(plan.events{i,2}, 'gantryAngle')
         
-        % Define original_gantry_start angle adjusting for roll, in degrees. The
-        % plan start gantry angle must be adjusted by the number of gantry
-        % rotations for all leading empty projections (defined by
-        % startTrim).
+        % Define original_gantry_start angle adjusting for roll, in 
+        % degrees. The plan start gantry angle must be adjusted by the 
+        % number of gantry rotations for all leading empty projections 
+        % (defined by startTrim).
         original_gantry_start = mod(plan.events{i,3} + (plan.startTrim(1) ...
             - 1) * 360/51 + plan.registration(3) * 180/pi, 360);
     end
@@ -307,9 +323,10 @@ clear i;
 
 % Define dose dimensions
 % The axial (xz) dimension assumes the dose volume will be square, and is
-% set to the current IECZ dimension of the CT (typically the smaller of the
-% two because of couch insertion) divided by the downsampling factor
-dose_dimensionxz = floor(image.dimensions(2) / downsample);
+% set to the largest current dimension of the CT divided by the 
+% downsampling factor
+dose_dimensionxz = floor(max(image.dimensions(1), image.dimensions(2)) ...
+    / downsample);
 
 % The y (IECY) dimension is equal to the CT image dimension. This means
 % dose will be calculated at the slice resolution
@@ -330,9 +347,9 @@ ctpix = image.width(1) * 10;
 % Define the dose grid center, in mm. This is set to be the center of the
 % CT images in the IECX and IECZ directions, in DICOM coordinates
 matcen_x = (image.start(1) + image.width(1) * ...
-    (image.dimensions(1)-1)/2) * 10;
+    (image.dimensions(1) - 1) / 2) * 10;
 matcen_z = -(image.start(2) + image.width(2) * ...
-    (image.dimensions(2)-1)/2) * 10;
+    (image.dimensions(2) - 1) / 2) * 10;
 
 % Define ctImPosPat as the three element DICOM position of the CT image. A
 % coordinate transformation is needed to go from image.start (TomoTherapy
@@ -383,8 +400,13 @@ end
 % using the IVDT associated with the plan. The image must also be flipped
 % around to get put back into DICOM coordinate space (which is what the
 % code below expects)
-ctimages = flip(interp1(image.ivdt(:,1), image.ivdt(:,2), ...
-    permute(image.data, [3 2 1]), 'linear', 'extrap'), 1);
+ctimages = interp1(image.ivdt(:,1), image.ivdt(:,2), ...
+    permute(image.data, [3 2 1]), 'linear', 'extrap');
+
+% Crop densities below 0.1 g/cc (if the IVDT contains an air point, it can
+% affect the effective depth calculations below)
+Event(sprintf('Cropping densities below %0.3f g/cc', density_threshold));
+ctimages(ctimages < density_threshold) = 0;
 
 % If the ct data is not square, pad it
 if size(ctimages,2) > size(ctimages,3)
@@ -452,7 +474,7 @@ zfocus = -850 * cos(alphav) / ctpix + rotz;
 
 % Compute the polar coordinates of the IEC X and Z values of each dose
 % voxel
-[phi, rho] = cart2pol(Xvalue2D, Zvalue2D);
+[phi, rho] = cart2pol(Xvalue2D - isoc_pos(1), -Zvalue2D + isoc_pos(2));
 
 % Compute several factors that are used to compute the distance from the
 % focal point and effective depth of each voxel
@@ -473,8 +495,8 @@ if exist('Event', 'file') == 2
 end
 
 % Store the corresponding CT pixel value of each dose voxel
-xpixel = (Xvalue2D) / ctpix + rotx;
-zpixel = (-Zvalue2D) / ctpix + rotz;
+xpixel = (Xvalue2D - isoc_pos(1)) / ctpix + rotx;
+zpixel = (Zvalue2D - isoc_pos(2)) / ctpix + rotz;
 
 % Initialize empty arrays to store focal distances and effective depth
 % vectors. The distances are a 2D matrix, with one column for each 
@@ -507,25 +529,10 @@ for iang = 1:51 * num_of_subprojections
         zfocus(iang), zpixel) * ctpix);
 end
 
-% Define the final isocenter position as the DICOM position at the last
-% projection, in mm. The amount of couch travel (applied to isoc_pos(3) is
-% determined using the product of the couch rotations, pitch, and field
-% width.
-final_isoc_pos = [isoc_pos(1) isoc_pos(2) (isoc_pos(3) - ...
-    size(sinogram, 2) / 51 * pitch * field_width * 10)];
-
-% Define ct_ymin using the head first notation, as the TomoTherapy image
-% always will assume HFS
-ct_ymin = isoc_pos(3) - dose_gridy * (dose_dimensiony - 1)/2 - ...
-    (isoc_pos(3) - final_isoc_pos(3)) / 2;
-
-% Compute the CT slice that corresponds to the dose slice, assuming
-% head first, as the TomoTherapy image always assumes HFS
-ct_ylist = ct_ymin + ((1:dose_dimensiony) - 1) * dose_gridy;
-
 % Store the IECX, Y, and Z values of each dose voxel in a vector
 Xvalue = single(repmat(Xvalue2D, 1, dose_dimensiony));
-Yvalue = single(reshape(repmat((ct_ylist-isoc_pos(3)), dose_dimensionxz * ...
+Yvalue = single(reshape(repmat((isoc_pos(3) + ctImPosPat(3) - ...
+    ((1:dose_dimensiony) - 1) * dose_gridy), dose_dimensionxz * ...
     dose_dimensionxz, 1), 1, []));
 Zvalue = single(repmat(Zvalue2D, 1, dose_dimensiony));
 
@@ -596,7 +603,7 @@ if isobject(pool) && pool.Connected
                     Theta3(:,gantryindex), Edepth(:,gantryindex)/10, ...
                     Dfoc(:,gantryindex)/10, gantry_period, ...
                     Ddepth(:,gantryindex)/10, reference_doserate, SP, TPR, ...
-                    OARXOPEN, OARXLEAVES, OARY, segments); %#ok<PFBNS,PFRUS>
+                    OARXOPEN, OARXLEAVES, OARY, segments); %#ok<PFBNS>
             end
         end
     end 
@@ -647,14 +654,18 @@ else
     end
 end
 
-% Compute the minimum effective depth (from any source angle) of each dose
-% voxel. This is used to truncate voxels that are near or outside the
-% patient; see the next line of code below.
-mindepth = min(Edepth, [], 2);
+% If the outside_body flag is set to zero
+if outside_body == 0
 
-% Truncate all dose voxels where the effective depth is less than 1.5 mm.
-% This effectively removes dose outside the patient/couch
-dosecube(mindepth < 1.5) = 0;
+    % Compute the minimum effective depth (from any source angle) of each 
+    % voxel. This is used to truncate voxels that are near or outside the
+    % patient; see the next line of code below.
+    mindepth = min(Edepth, [], 2);
+
+    % Truncate all dose voxels where the effective depth is less than 1.5
+    % mm. This effectively removes dose outside the patient/couch
+    dosecube(mindepth < 1.5) = 0;
+end
 
 %% Garbage collection
 % Clean up unused variables
@@ -682,25 +693,22 @@ dose.width = image.width;
 dose.dimensions = image.dimensions;
 
 % Reshape the dose voxel IEC X and Z position vectors into meshgrid format.
-x = reshape(Xvalue + dose_gridxz * 1/2, dose_dimensionxz, dose_dimensionxz, ...
-    dose_dimensiony);
-z = reshape(Zvalue + dose_gridxz * 3/8, dose_dimensionxz, dose_dimensionxz, ...
-    dose_dimensiony);
-dose_small = reshape(dosecube, dose_dimensionxz, dose_dimensionxz, ...
-    dose_dimensiony);
+x = reshape(Xvalue, dose_dimensionxz, dose_dimensionxz, dose_dimensiony);
+z = reshape(Zvalue, dose_dimensionxz, dose_dimensionxz, dose_dimensiony);
+dose_small = flip(reshape(dosecube, dose_dimensionxz, dose_dimensionxz, ...
+    dose_dimensiony), 1);
 
 % Compute target meshgrids
-[my, mx] = meshgrid((dose.start(2) + dose.width(2) * (dose.dimensions(2)-3))...
-    :-dose.width(2):dose.start(2)-dose.width(2)*2, ...
-    dose.start(1)+dose.width(1):dose.width(1):...
-    (dose.start(1) + dose.width(1) * (dose.dimensions(1))));
+[mz, mx] = meshgrid(-(dose.start(2):dose.width(2):(dose.start(2) + ...
+    dose.width(2) * (dose.dimensions(2) - 1))), dose.start(1):...
+    dose.width(1):(dose.start(1) + dose.width(1) * (dose.dimensions(1) - 1)));
 
 % Loop through slices
 for i = 1:dose.dimensions(3)
    
     % Interpolate back to image dimensions
-    dose.data(:,:,i) = interp2(x(:,:,i)/10, z(:,:,i)/10, dose_small(:,:,i), ...
-        mx + dose_gridxz/20, my - dose_gridxz/20, 'nearest', 0);
+    dose.data(:,:,i) = interp2(x(:,:,i)/10, z(:,:,i)/10, ...
+        dose_small(:,:,i), mx, mz, 'nearest', 0);
 end
 
 % Clear temporary variables
