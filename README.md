@@ -38,7 +38,7 @@ A parallel pool can also be passed in the third input argument (the first two mu
 dose = CheckTomoDose(image, plan, pool);
 ```
 
-Finally, additional configuration options can be passed as name/value pairs for input arguments 4 and on. The available options are 'downsample', 'reference_doserate', and 'num_of_subprojections'. See the code below for detail on each option:
+Finally, additional configuration options can be passed as name/value pairs for input arguments 4 and on. The available options are 'downsample', 'reference_doserate', 'outside_body', 'density_threshold', and 'num_of_subprojections'. See the code for detail on each option:
 
 ```matlab
 dose = CheckTomoDose(image, plan, pool, 'reference_doserate', 8.2);
