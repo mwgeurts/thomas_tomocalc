@@ -209,7 +209,14 @@ if exist('Event', 'file') == 2
         Event(sprintf(['Beginning dose calculation using parallel ', ...
             'pool with %i workers'], pool.NumWorkers));
         tic
-        ticBytes(pool)
+        
+        % Try to run ticBytes. If prior to R2016b, this will fail.
+        try
+            ticBytes(pool)
+        catch
+            Event(['ticBytes failed to execute, data transfer will ', ...
+                'not be recorded'], 'WARN');
+        end
     else
         Event('Beginning dose calculation a single worker');
         tic
@@ -719,10 +726,21 @@ if exist('Event', 'file') == 2
     
     % If using a parallel pool
     if isobject(pool) && pool.Connected
-        t = tocBytes(pool);
+        
+        % Try to retrieve the number of bytes sent. For users prior to
+        % R2016b, this will fail, so catch and report 0.
+        try
+            t = tocBytes(pool);
+        catch
+            t = 0;
+        end
+        
+        % Log conclusion with bytes sent
         Event(sprintf(['Dose calculation completed successfully in %0.3f ', ...
             'seconds, sending %0.1f MB to %i workers'], toc, ...
             sum(t(:,1))/1024^2, pool.NumWorkers));
+    
+    % Otherwise just log conclusion
     else
         Event(sprintf(['Dose calculation completed successfully in %0.3f ', ...
             'seconds'], toc));
