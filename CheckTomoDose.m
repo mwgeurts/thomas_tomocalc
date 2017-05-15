@@ -278,8 +278,8 @@ end
 % Store the field width from the plan structure
 field_width = sum(abs([plan.frontField plan.backField]));
 
-% Store the machine agnostic sinogram (normalized to 1)
-sinogram = plan.agnostic;
+% Store the fluence sinogram (normalized to 1)
+sinogram = plan.sinogram;
 
 % Store the plan pitch (unitless)
 pitch = plan.pitch;
