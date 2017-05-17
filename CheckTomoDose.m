@@ -113,6 +113,11 @@ outside_body = 0;
 % needed to help the system define where the patient surface is
 density_threshold = 0.01;
 
+% Define empty dose mask. This can be set by input variables to reduce the
+% size of the dose volume calculated during execution, reducing computation
+% time. If left empty, the dose volume will encompass the entire CT.
+mask = [];
+
 % If no inputs provided, return calcdose flag
 if nargin == 1
     
@@ -167,6 +172,10 @@ for i = 4:2:nargin
     % Else, if the user passed a density_threshold input argument
     elseif strcmpi(varargin{i}, 'density_threshold')
         density_threshold = varargin{i+1};
+        
+    % Else, if the user passed a mask input argument
+    elseif strcmpi(varargin{i}, 'mask')
+        mask = varargin{i+1};
     end   
 end
 
@@ -184,7 +193,7 @@ if ~isfield(plan, 'planType') || ~strcmp(plan.planType, 'Helical')
     end
 end
 
-%% Verify registration
+%% Verify inputs
 % If no registration vector was provided, add an empty one
 if ~isfield(plan, 'registration')
     plan.registration = [0 0 0 0 0 0];
@@ -201,6 +210,20 @@ if plan.registration(1) ~= 0 || plan.registration(2) ~= 0
     end
 end
 
+% If a mask was passed but is invalid
+if ~isempty(mask) && (~isequal(size(image.data), size(mask)) || ...
+        max(max(max(abs(mask)))) == 0)
+
+    if exist('Event', 'file') == 2
+        Event(['The dose mask must be an array of the same size as the ', ...
+            'CT image and must contain at least one voxel greater than 0'], ...
+            'ERROR');
+    else
+        error(['The dose mask must be an array of the same size as the ', ...
+            'CT image and must contain at least one voxel greater than 0']);
+    end
+end
+    
 % Log beginning of dose calculation and start timer(s)
 if exist('Event', 'file') == 2
     
@@ -328,41 +351,91 @@ end
 % Clear temporary variables
 clear i;
 
-% Define dose dimensions
-% The axial (xz) dimension assumes the dose volume will be square, and is
-% set to the largest current dimension of the CT divided by the 
-% downsampling factor
-dose_dimensionxz = floor(max(image.dimensions(1), image.dimensions(2)) ...
-    / downsample);
+% Define dose array dimensions if no mask exists
+if isempty(mask)
 
-% The y (IECY) dimension is equal to the CT image dimension. This means
-% dose will be calculated at the slice resolution
-dose_dimensiony = image.dimensions(3);
+    % The axial (xz) dimension assumes the dose volume will be square, and
+    % is set to the largest current dimension of the CT divided by the 
+    % downsampling factor
+    dose_dimensionxz = floor(max(image.dimensions(1), image.dimensions(2)) ...
+        / downsample);
 
-% dose_gridxz defines the voxel width (in mm) of the dose grid in the axial 
-% direction. It is set based on the CT voxel size multiplied by the
-% downsample factor converted to mm.
+    % The y (IECY) dimension is equal to the CT image dimension. This means
+    % dose will be calculated at the slice resolution
+    dose_dimensiony = image.dimensions(3);
+    
+    % Define the dose grid center, in mm. This is set to be the center of 
+    % the CT images, in DICOM coordinates.
+    matcen_x = (image.start(1) + image.width(1) * ...
+        (image.dimensions(1) - 1) / 2) * 10;
+    matcen_z = -(image.start(2) + image.width(2) * ...
+        (image.dimensions(2) - 1) / 2) * 10;
+    matcen_y = (isoc_pos(3)/10 - image.start(3) - image.width(3) * ...
+        (image.dimensions(3) - 1) / 2) * 10;
+    
+    % Define ctimages as the 3D CT image volume. The image must also be 
+    % flipped around to get put back into DICOM coordinate space (which is 
+    % what the code below expects)
+    ctimages = permute(image.data, [3 2 1]);
+
+% Otherwise, define dose array using the provided mask
+else
+    
+    % Store the index range of nonzero voxels in the IEC X dimension
+    minx = find(squeeze(sum(sum(mask,3),2)), 1, 'first');
+    maxx = find(squeeze(sum(sum(mask,3),2)), 1, 'last');
+    
+    % Store the index range of nonzero voxels in the IEC Z dimension
+    minz = image.dimensions(2) - ...
+        find(squeeze(sum(sum(mask,3),1)), 1, 'last');
+    maxz = image.dimensions(2) - ...
+        find(squeeze(sum(sum(mask,3),1)), 1, 'first');
+    
+    % Store the index range of nonzero voxels in the IEC Y dimension
+    miny = find(squeeze(sum(sum(mask, 1), 2)), 1, 'first');
+    maxy = find(squeeze(sum(sum(mask, 1), 2)), 1, 'last');
+    
+    % Set the axial dose dimension to the larger of the two X/Z nonzero 
+    % index ranges, divided by the downsampling factor, + 2
+    dose_dimensionxz = floor(max([maxx-minx+1 ...
+        (maxz-image.dimensions(2)/2+1)*2 ...
+        (image.dimensions(2)/2-minz+1)*2]) / downsample);
+    
+    % Set the IECY dose dimension to the range of CT slices
+    dose_dimensiony = maxy - miny + 1;
+    
+    % Store the dose grid center based on the center of the indices
+    matcen_x = (image.start(1) + image.width(1) * ...
+        (minx + (maxx - minx) / 2 - 1)) * 10;
+    matcen_z = -(image.start(2) + image.width(2) * ...
+        (image.dimensions(2) - 1) / 2) * 10;
+    matcen_y = (isoc_pos(3)/10 - image.start(3) - image.width(3) * ...
+        (miny + (maxy - miny) / 2 - 1)) * 10;
+    
+    % Re-slice ctimages to only the masked slices, permuting to DICOM
+    ctimages = permute(image.data(:, :, miny:maxy), [3 2 1]);
+    
+    % Clear temporary variables
+    clear minx miny minz maxx maxy maxz;
+end
+
+% dose_gridxz defines the voxel width (in mm) of the dose grid in the 
+% axial direction. It is set based on the CT voxel size multiplied by 
+% thedownsample factor converted to mm.
 dose_gridxz = image.width(1) * downsample * 10;
 
-% dose_gridy defines the voxel width (in mm) of the dose grid in the IECY
-% dimension. It is set to the CT slice width in mm.
+% dose_gridy defines the voxel width (in mm) of the dose grid in the 
+% IECY dimension. It is set to the CT slice width in mm.
 dose_gridy = image.width(3) * 10;
-
-% Define ctpix as the CT axial resolution in mm.
-ctpix = image.width(1) * 10;
-
-% Define the dose grid center, in mm. This is set to be the center of the
-% CT images in the IECX and IECZ directions, in DICOM coordinates
-matcen_x = (image.start(1) + image.width(1) * ...
-    (image.dimensions(1) - 1) / 2) * 10;
-matcen_z = -(image.start(2) + image.width(2) * ...
-    (image.dimensions(2) - 1) / 2) * 10;
 
 % Define ctImPosPat as the three element DICOM position of the CT image. A
 % coordinate transformation is needed to go from image.start (TomoTherapy
 % coordinate system) which defines the lower left voxel, to  DICOM, in mm.
 ctImPosPat = [image.start(1) -(image.start(2) + image.width(2)...
     * (image.dimensions(2)-1)) -image.start(3)] * 10;
+
+% Define ctpix as the CT axial resolution in mm.
+ctpix = image.width(1) * 10;
 
 % Define the gantry period in seconds, defined by the plan scale (seconds 
 % per projection) multiplied by 51 projections and divided by the number of
@@ -378,22 +451,22 @@ if exist('Event', 'file') == 2
     Event(sprintf('Gantry Period: %0.3f sec', gantry_period));
     Event(sprintf('Number of projections: %i', size(sinogram, 2)));
     Event(sprintf('Number of subprojections: %i', num_of_subprojections));
-    Event(sprintf('Isocenter position: [%0.2f %0.2f %0.2f] mm', isoc_pos(1), ...
-        isoc_pos(2), isoc_pos(3)));
+    Event(sprintf('Isocenter position: [%0.2f %0.2f %0.2f] mm', ...
+        isoc_pos(1), isoc_pos(2), isoc_pos(3)));
     Event(sprintf('Gantry start angle: %0.2f deg', original_gantry_start));
-    Event(sprintf('Dose grid dimensions (xz): %i', dose_dimensionxz));
-    Event(sprintf('Dose grid dimensions (y): %i', dose_dimensiony));
-    Event(sprintf('Dose grid resolution (xz): %0.2f mm', dose_gridxz));
-    Event(sprintf('Dose grid resolution (y): %0.2f mm', dose_gridy));
-    Event(sprintf('Dose grid center (xz): [%0.2f %0.2f] mm', ...
-        matcen_x, matcen_z));
-    Event(sprintf('CT resolution: %0.2f mm', ctpix));
-    Event(sprintf('CT image position: [%0.2f %0.2f %0.2f] mm', ctImPosPat(1), ...
-        ctImPosPat(2), ctImPosPat(3)));
+    Event(sprintf('Dose grid dimensions: [%i %i %i]', dose_dimensionxz, ...
+        dose_dimensionxz, dose_dimensiony));
+    Event(sprintf('Dose grid resolution: [%0.2f %0.2f %0.2f] mm', ...
+        dose_gridxz, dose_gridxz, dose_gridy));
+    Event(sprintf('Dose grid center: [%0.2f %0.2f %0.2f] mm', ...
+        matcen_x, matcen_z, matcen_y));
+    Event(sprintf('CT axial resolution: %0.2f mm', ctpix));
+    Event(sprintf('CT image position: [%0.2f %0.2f %0.2f] mm', ...
+        ctImPosPat(1), ctImPosPat(2), ctImPosPat(3)));
 end
 
 %% Run dose_from_sin code
-% Log the start of readTomodata
+% Log action
 if exist('Event', 'file') == 2
     Event(sprintf(['Executing readTomodata(%0.1f) to load TPR, OAR, ', ...
         'and Sp factors'], field_width));
@@ -403,24 +476,34 @@ end
 % global variables
 [TPR, SP, OARXOPEN, OARXLEAVES, OARY] = readTomodata(field_width);
 
-% Define ctimages as the 3D CT image volume converted to physical density
-% using the IVDT associated with the plan. The image must also be flipped
-% around to get put back into DICOM coordinate space (which is what the
-% code below expects)
-ctimages = interp1(image.ivdt(:,1), image.ivdt(:,2), ...
-    permute(image.data, [3 2 1]), 'linear', 'extrap');
+% Log action
+if exist('Event', 'file') == 2
+    Event('Converting HU values to physical density using IVDT');
+end
+
+% Convert the image voxels to physical density using the IVDT associated 
+% with the plan.
+ctimages = interp1(image.ivdt(:,1), image.ivdt(:,2), ctimages, ...
+    'linear', 'extrap');
+
+% Log action
+if exist('Event', 'file') == 2
+    Event(sprintf('Cropping densities below %0.3f g/cc', ...
+        density_threshold));
+end
 
 % Crop densities below 0.1 g/cc (if the IVDT contains an air point, it can
 % affect the effective depth calculations below)
-Event(sprintf('Cropping densities below %0.3f g/cc', density_threshold));
 ctimages(ctimages < density_threshold) = 0;
 
 % If the ct data is not square, pad it
 if size(ctimages,2) > size(ctimages,3)
   
     % Log action
-    Event(sprintf('Padding CT in Z dimension to %i x %i', ...
-        size(ctimages,2), size(ctimages,2)));
+    if exist('Event', 'file') == 2
+        Event(sprintf('Padding CT in X dimension to %i x %i', ...
+            size(ctimages,2), size(ctimages,2)));
+    end
     
     % Add empty voxels
     ctimages = cat(3, zeros(size(ctimages,1), size(ctimages,2), ...
@@ -429,8 +512,10 @@ if size(ctimages,2) > size(ctimages,3)
 elseif size(ctimages,2) < size(ctimages,3)
     
     % Log action
-    Event(sprintf('Padding CT in X dimension to %i x %i', ...
-        size(ctimages,3), size(ctimages,3)));
+    if exist('Event', 'file') == 2
+        Event(sprintf('Padding CT in Z dimension to %i x %i', ...
+            size(ctimages,3), size(ctimages,3)));
+    end
     
     % Add empty voxels
     ctimages = cat(2, ctimages, zeros(size(ctimages,1), size(ctimages,3) - ...
@@ -494,7 +579,7 @@ ppp = repmat(rho', 1, 51 * num_of_subprojections) .* ...
 theta = atan(ppp ./ (850 - delta_depth));
 
 %% Garbage collection
-clear alphav phi ppp rho xzlist matcen_x matcen_z;
+clear alphav phi ppp rho xzlist;
 
 %% Ray Tracing
 if exist('Event', 'file') == 2
@@ -538,8 +623,8 @@ end
 
 % Store the IECX, Y, and Z values of each dose voxel in a vector
 Xvalue = single(repmat(Xvalue2D, 1, dose_dimensiony));
-Yvalue = single(reshape(repmat((isoc_pos(3) + ctImPosPat(3) - ...
-    ((1:dose_dimensiony) - 1) * dose_gridy), dose_dimensionxz * ...
+Yvalue = single(reshape(repmat((matcen_y - ((1:dose_dimensiony) - ...
+    (dose_dimensiony + 1)/2) * dose_gridy), dose_dimensionxz * ...
     dose_dimensionxz, 1), 1, []));
 Zvalue = single(repmat(Zvalue2D, 1, dose_dimensiony));
 
@@ -555,7 +640,8 @@ Ddepth = single(repmat(delta_depth, dose_dimensiony, 1));
 %% Garbage Collection
 % Clear array variables that are no longer used
 clear ct_ylist ctimages dfromfoc effdepth theta xfocus xpixel delta_depth...
-   Xvalue2D zfocus zpixel Zvalue2D n2d ndim ctpix isoc_pos rotx rotz;
+   Xvalue2D zfocus zpixel Zvalue2D n2d ndim ctpix rotx rotz matcen_x ...
+   matcen_y matcen_z;
 
 %% Dose Calculation
 % Log start of dose calculation
@@ -677,8 +763,8 @@ end
 %% Garbage collection
 % Clean up unused variables
 clear Dfoc Edepth sinogram segments projection subproj SP OARXLEAVES ...
-    OARXOPEN OARY Theta3 TPR mindepth gantry_period pitch Ddepth Yvalue ...
-    subprojections localY;
+    OARXOPEN OARY Theta3 TPR mindepth gantry_period pitch Ddepth localY ...
+    subprojections;
 
 %% Interpolate back to CT resolution
 % Log interpolation step
@@ -699,27 +785,29 @@ dose.start = image.start;
 dose.width = image.width;
 dose.dimensions = image.dimensions;
 
-% Reshape the dose voxel IEC X and Z position vectors into meshgrid format.
+% Reshape the dose voxel position vectors into meshgrid format, and convert
+% back to cm
 x = reshape(Xvalue, dose_dimensionxz, dose_dimensionxz, dose_dimensiony);
+y = reshape(Yvalue, dose_dimensionxz, dose_dimensionxz, dose_dimensiony);
 z = reshape(Zvalue, dose_dimensionxz, dose_dimensionxz, dose_dimensiony);
+
+% Reshape the dose grid back into a volume
 dose_small = flip(reshape(dosecube, dose_dimensionxz, dose_dimensionxz, ...
     dose_dimensiony), 1);
 
 % Compute target meshgrids
-[mz, mx] = meshgrid(-(dose.start(2):dose.width(2):(dose.start(2) + ...
+[mz, mx, my] = meshgrid(-(dose.start(2):dose.width(2):(dose.start(2) + ...
     dose.width(2) * (dose.dimensions(2) - 1))), dose.start(1):...
-    dose.width(1):(dose.start(1) + dose.width(1) * (dose.dimensions(1) - 1)));
+    dose.width(1):(dose.start(1) + dose.width(1) * ...
+    (dose.dimensions(1) - 1)), isoc_pos(3)/10 - dose.start(3) - ...
+    ((1:dose.dimensions(3)) - 1) * dose.width(3));
 
-% Loop through slices
-for i = 1:dose.dimensions(3)
-   
-    % Interpolate back to image dimensions
-    dose.data(:,:,i) = interp2(x(:,:,i)/10, z(:,:,i)/10, ...
-        dose_small(:,:,i), mx, mz, 'nearest', 0);
-end
+% Interpolate back to image dimensions
+dose.data = interp3(x/10, z/10, y/10, dose_small, mx, mz, my, 'nearest', 0);
 
 % Clear temporary variables
-clear x y z i mx my dose_small dosecube downsample Xvalue Zvalue;
+clear x y z mx my mz dose_small dosecube downsample Xvalue Yvalue Zvalue ...
+    isoc_pos;
 
 % Log conclusion and stop timer
 if exist('Event', 'file') == 2
