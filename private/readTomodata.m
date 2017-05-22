@@ -211,5 +211,8 @@ while ~feof(fid)
     end
 end
 
+% Close file handle
+fclose(fid);
+
 % Clear temporary variables
 clear i D fid tagvalue start_path files field_width;
