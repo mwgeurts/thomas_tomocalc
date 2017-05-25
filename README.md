@@ -68,7 +68,7 @@ dose = CheckTomoDose(image, plan, pool, 'downsample', 4);
 
 ## Compatibility and Requirements
 
-These functions have been developed in MATLAB R2016b (9.1) on Mac OS X version 10.12.4 and Parallel Computing Toolbox version 6.9. The Parallel Computing Toolbox is only required if you wish to run the calculation against a local or MATLAB cluster parallel pool.
+These functions have been developed in MATLAB R2016b (9.1) on Mac OS X version 10.12.4 and Parallel Computing Toolbox version 6.9. It has also been validated in R2017a (9.2), Windows 7 (x64), and Parallel Computing Toolbox 6.10. The Parallel Computing Toolbox is only required if you wish to run the calculation against a local or MATLAB cluster parallel pool.
 
 ## Methods
 
