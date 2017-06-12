@@ -41,7 +41,8 @@ function dose = CheckTomoDose(varargin)
 % Finally, additional configuration options can be passed as name/value
 % pairs for input arguments 4 and on. The available options are 
 % 'downsample', 'reference_doserate', 'outside_body', 'density_threshold', 
-% and 'num_of_subprojections'. See the code for detail on each option:
+% 'mask', and 'num_of_subprojections'. See the code for detail on each 
+% option:
 %
 %   dose = CheckTomoDose(image, plan, pool, 'reference_doserate', 8.2);
 %   dose = CheckTomoDose(image, plan, [], 'num_of_subprojections', 3);
@@ -88,7 +89,7 @@ persistent pool image;
 
 % Downsample the dose grid by this factor in the IEC X and Z directions.
 % This value can be overridden in the input arguments
-downsample = 8;
+downsample = 4;
 
 % Define the machine nominal dose rate in Gy/min as a global. This is used
 % by dose_from_projection(). This value can be overriden in the input
@@ -228,7 +229,7 @@ end
 if exist('Event', 'file') == 2
     
     % If using a parallel pool
-    if isobject(pool) && pool.Connected
+    if ~isempty(pool) && isobject(pool) && pool.Connected
         Event(sprintf(['Beginning dose calculation using parallel ', ...
             'pool with %i workers'], pool.NumWorkers));
         tic
@@ -248,7 +249,7 @@ end
 
 %% Initialize parallel pool
 % Attach the necessary files, if they do not already exist
-if isobject(pool) && pool.Connected
+if ~isempty(pool) && isobject(pool) && pool.Connected
     
     % Define necessary files for parallel computation
     necessaryFiles = {
@@ -492,8 +493,8 @@ if exist('Event', 'file') == 2
         density_threshold));
 end
 
-% Crop densities below 0.1 g/cc (if the IVDT contains an air point, it can
-% affect the effective depth calculations below)
+% Crop densities below the threshold, in g/cc (if the IVDT contains an air 
+% point, it can affect the effective depth calculations below)
 ctimages(ctimages < density_threshold) = 0;
 
 % If the ct data is not square, pad it
@@ -654,7 +655,7 @@ dosecube = single(zeros(1, dose_dimensionxz * dose_dimensionxz * ...
     dose_dimensiony));
 
 % If a parallel pool exists
-if isobject(pool) && pool.Connected
+if ~isempty(pool) && isobject(pool) && pool.Connected
     
     % Log start of dose calculation
     if exist('Event', 'file') == 2
@@ -813,7 +814,7 @@ clear x y z mx my mz dose_small dosecube downsample Xvalue Yvalue Zvalue ...
 if exist('Event', 'file') == 2
     
     % If using a parallel pool
-    if isobject(pool) && pool.Connected
+    if ~isempty(pool) && isobject(pool) && pool.Connected
         
         % Try to retrieve the number of bytes sent. For users prior to
         % R2016b, this will fail, so catch and report 0.
