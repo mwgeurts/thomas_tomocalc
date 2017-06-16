@@ -598,10 +598,10 @@ zpixel = (Zvalue2D - isoc_pos(2)) / ctpix + rotz;
 % Y dose image, the second each XZ dose voxel, and the third for each 
 % subprojection.  These are single precision arrays, to reduce overall 
 % memory requirements
-dfromfoc = single(zeros(dose_dimensionxz * dose_dimensionxz, ...
-    51 * num_of_subprojections));
-effdepth = single(zeros(dose_dimensiony, dose_dimensionxz * ...
-    dose_dimensionxz, 51 * num_of_subprojections));
+dfromfoc = zeros(dose_dimensionxz * dose_dimensionxz, ...
+    51 * num_of_subprojections, 'single');
+effdepth = zeros(dose_dimensiony, dose_dimensionxz * ...
+    dose_dimensionxz, 51 * num_of_subprojections, 'single');
 
 % Loop through each subprojection
 for iang = 1:51 * num_of_subprojections
@@ -651,8 +651,8 @@ if exist('Event', 'file') == 2
 end
 
 % Initialize empty dose cube array
-dosecube = single(zeros(1, dose_dimensionxz * dose_dimensionxz * ...
-    dose_dimensiony));
+dosecube = zeros(1, dose_dimensionxz * dose_dimensionxz * ...
+    dose_dimensiony, 'single');
 
 % If a parallel pool exists
 if ~isempty(pool) && isobject(pool) && pool.Connected
