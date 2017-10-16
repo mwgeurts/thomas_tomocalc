@@ -18,12 +18,6 @@ The function `CheckTomoDose` can be executed with various combinations of input 
 dose = CheckTomoDose(image, plan);
 ```
 
-The image is stored persistently, so after the first call, a second plan may be calculated with only one input argument:
-
-```matlab
-dose = CheckTomoDose(plan);
-```
-
 A parallel pool can also be passed in the third input argument (the first two must be image and plan):
 
 ```matlab
