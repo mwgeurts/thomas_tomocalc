@@ -12,7 +12,7 @@ To install this function, copy all MATLAB .m and .txt files from this repository
 
 ## Usage and Documentation
 
-The function `CheckTomoDose` can be executed with various combinations of input arguments. Upon first execution, at least two arguments are required, as shown in the following example. See the [wiki documentation](https://github.com/mwgeurts/checktomo/wiki/Dose-Calculator-Runtime-Requirements) for more information on the input and return variable formats.
+The function `CheckTomoDose` can be executed with various combinations of input arguments. Upon first execution, at least two arguments are required, as shown in the following example. See the [wiki documentation](https://github.com/mwgeurts/checktomo/wiki/Dose-Calculator-Inputs) for more information on the input and return variable formats.
 
 ```matlab
 dose = CheckTomoDose(image, plan);
