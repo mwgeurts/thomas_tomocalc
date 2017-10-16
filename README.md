@@ -4,9 +4,7 @@ by Simon Thomas, adapted by Mark Geurts <mark.w.geurts@gmail.com>
 <br>Copyright &copy; 2017, University of Wisconsin Board of Regents
 <br>Original work copyright &copy; 2011-15, Simon Thomas 
 
-The TomoTherapy&reg; MATLAB Dose Calculator is a modified form of the original `dose_from_sin` function in the [CheckTomo tool](http://onlinelibrary.wiley.com/doi/10.1118/1.3668061/full) developed by Simon Thomas. It was adapted to calculate dose given input data provided in the format used by the [tomo_extract](https://github.com/mwgeurts/tomo_extract) and [dicom_tools](https://github.com/mwgeurts/dicom_tools) repositories.
-
-TomoTherapy is a registered trademark of Accuray Incorporated.
+The TomoTherapy<sup>&reg;</sup> MATLAB<sup>&reg;</sup> Dose Calculator is a modified form of the original `dose_from_sin` function in the [CheckTomo tool](http://onlinelibrary.wiley.com/doi/10.1118/1.3668061/full) developed by Simon Thomas. It was adapted to calculate dose given input data provided in the format used by the [tomo_extract](https://github.com/mwgeurts/tomo_extract) and [dicom_tools](https://github.com/mwgeurts/dicom_tools) repositories. TomoTherapy is a registered trademark of Accuray Incorporated. MATLAB is a registered trademark of MathWorks Inc.
 
 ## Installation
 
