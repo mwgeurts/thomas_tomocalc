@@ -4,7 +4,7 @@ by Simon Thomas, adapted by Mark Geurts <mark.w.geurts@gmail.com>
 <br>Copyright &copy; 2017, University of Wisconsin Board of Regents
 <br>Original work copyright &copy; 2011-15, Simon Thomas 
 
-The TomoTherapy&reg; MATLAB Dose Calculator is a modified form of the original `dose_from_sin` function in the [CheckTomo tool](http://onlinelibrary.wiley.com/doi/10.1118/1.3668061/full) developed by Simon Thomas. It was adapted to calculate dose given input data provided in the format used by the [tomo_extract](https://github.com/mwgeurts/tomo_extract) and [dicom_tools](https://github.com/mwgeurts/dicom_tools) repositories. The function was also expanded to allow computation on a MATLAB cluster to improve computation time. Various other minor changes have been made to different lines of the code; refer to the [wiki documentation](https://github.com/mwgeurts/checktomo/wiki/Dose-Calculator-Runtime-Requirements) for more information.
+The TomoTherapy&reg; MATLAB Dose Calculator is a modified form of the original `dose_from_sin` function in the [CheckTomo tool](http://onlinelibrary.wiley.com/doi/10.1118/1.3668061/full) developed by Simon Thomas. It was adapted to calculate dose given input data provided in the format used by the [tomo_extract](https://github.com/mwgeurts/tomo_extract) and [dicom_tools](https://github.com/mwgeurts/dicom_tools) repositories.
 
 TomoTherapy is a registered trademark of Accuray Incorporated.
 
@@ -32,7 +32,7 @@ A parallel pool can also be passed in the third input argument (the first two mu
 dose = CheckTomoDose(image, plan, pool);
 ```
 
-Finally, additional configuration options can be passed as name/value pairs for input arguments 4 and on. The available options are `downsample`, `reference_doserate`, `outside_body`, `density_threshold`, and `num_of_subprojections`. See the [wiki documentation](https://github.com/mwgeurts/checktomo/wiki/Dose-Calculator-Runtime-Requirements) for detail on each option:
+Finally, additional configuration options can be passed as name/value pairs for input arguments 4 and on. The available options are `downsample`, `reference_doserate`, `outside_body`, `density_threshold`, and `num_of_subprojections`.
 
 ```matlab
 dose = CheckTomoDose(image, plan, pool, 'reference_doserate', 8.2);
