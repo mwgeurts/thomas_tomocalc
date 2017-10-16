@@ -8,9 +8,11 @@ The TomoTherapy&reg; MATLAB Dose Calculator is a modified form of the original `
 
 TomoTherapy is a registered trademark of Accuray Incorporated.
 
-## Installation and Use
+## Installation
 
 To install this function, copy all MATLAB .m and .txt files from this repository into your MATLAB path. If installing as a submodule into another git repository, execute `git submodule add https://github.com/mwgeurts/thomas_tomocalc`. To execute a dose calculation, call `CheckTomoDose`.
+
+## Usage and Documentation
 
 The function `CheckTomoDose` can be executed with various combinations of input arguments. Upon first execution, at least two arguments are required, as shown in the following example. See the [wiki documentation](https://github.com/mwgeurts/checktomo/wiki/Dose-Calculator-Runtime-Requirements) for more information on the input and return variable formats.
 
